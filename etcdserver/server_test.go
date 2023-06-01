@@ -500,7 +500,7 @@ func TestApplyRequestOnAdminMemberAttributes(t *testing.T) {
 }
 
 func TestApplyConfChangeError(t *testing.T) {
-	cl := membership.NewCluster(zap.NewExample(), "")
+	cl := membership.NewCluster(zap.NewExample(), "", false)
 	cl.SetStore(v2store.New())
 	for i := 1; i <= 4; i++ {
 		cl.AddMember(&membership.Member{ID: types.ID(i)})
@@ -588,7 +588,7 @@ func TestApplyConfChangeError(t *testing.T) {
 }
 
 func TestApplyConfChangeShouldStop(t *testing.T) {
-	cl := membership.NewCluster(zap.NewExample(), "")
+	cl := membership.NewCluster(zap.NewExample(), "", false)
 	cl.SetStore(v2store.New())
 	for i := 1; i <= 3; i++ {
 		cl.AddMember(&membership.Member{ID: types.ID(i)})
@@ -632,7 +632,7 @@ func TestApplyConfChangeShouldStop(t *testing.T) {
 // TestApplyConfigChangeUpdatesConsistIndex ensures a config change also updates the consistIndex
 // where consistIndex equals to applied index.
 func TestApplyConfigChangeUpdatesConsistIndex(t *testing.T) {
-	cl := membership.NewCluster(zap.NewExample(), "")
+	cl := membership.NewCluster(zap.NewExample(), "", false)
 	cl.SetStore(v2store.New())
 	cl.AddMember(&membership.Member{ID: types.ID(1)})
 	r := newRaftNode(raftNodeConfig{
@@ -678,7 +678,7 @@ func TestApplyConfigChangeUpdatesConsistIndex(t *testing.T) {
 // TestApplyMultiConfChangeShouldStop ensures that apply will return shouldStop
 // if the local member is removed along with other conf updates.
 func TestApplyMultiConfChangeShouldStop(t *testing.T) {
-	cl := membership.NewCluster(zap.NewExample(), "")
+	cl := membership.NewCluster(zap.NewExample(), "", false)
 	cl.SetStore(v2store.New())
 	for i := 1; i <= 5; i++ {
 		cl.AddMember(&membership.Member{ID: types.ID(i)})
@@ -1031,7 +1031,7 @@ func TestSnapshot(t *testing.T) {
 func TestSnapshotOrdering(t *testing.T) {
 	n := newNopReadyNode()
 	st := v2store.New()
-	cl := membership.NewCluster(zap.NewExample(), "abc")
+	cl := membership.NewCluster(zap.NewExample(), "abc", false)
 	cl.SetStore(st)
 
 	testdir, err := ioutil.TempDir(os.TempDir(), "testsnapdir")
@@ -1184,7 +1184,7 @@ func TestTriggerSnap(t *testing.T) {
 func TestConcurrentApplyAndSnapshotV3(t *testing.T) {
 	n := newNopReadyNode()
 	st := v2store.New()
-	cl := membership.NewCluster(zap.NewExample(), "abc")
+	cl := membership.NewCluster(zap.NewExample(), "abc", false)
 	cl.SetStore(st)
 
 	testdir, err := ioutil.TempDir(os.TempDir(), "testsnapdir")
@@ -1631,7 +1631,7 @@ func TestGetOtherPeerURLs(t *testing.T) {
 		},
 	}
 	for i, tt := range tests {
-		cl := membership.NewClusterFromMembers(zap.NewExample(), "", types.ID(0), tt.membs)
+		cl := membership.NewClusterFromMembers(zap.NewExample(), "", types.ID(0), tt.membs, false)
 		self := "1"
 		urls := getRemotePeerURLs(cl, self)
 		if !reflect.DeepEqual(urls, tt.wurls) {
@@ -1783,7 +1783,7 @@ func (n *nodeCommitter) Propose(ctx context.Context, data []byte) error {
 }
 
 func newTestCluster(membs []*membership.Member) *membership.RaftCluster {
-	c := membership.NewCluster(zap.NewExample(), "")
+	c := membership.NewCluster(zap.NewExample(), "", false)
 	for _, m := range membs {
 		c.AddMember(m)
 	}
