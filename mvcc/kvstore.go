@@ -379,6 +379,28 @@ func (s *store) restore() error {
 	tx := s.b.BatchTx()
 	tx.Lock()
 
+	metaBucketKeys := map[string]struct{}{
+		string(consistentIndexKeyName):  {},
+		string(scheduledCompactKeyName): {},
+		string(finishedCompactKeyName):  {},
+	}
+
+	err := tx.UnsafeForEach(metaBucketName, func(k []byte, v []byte) error {
+		kstr := string(k)
+		if _, ok := metaBucketKeys[kstr]; !ok {
+			return fmt.Errorf("invalid key: %s found in 3.4 meta bucket. use `etcdutl migrate` to migrate the data_dir before downgrade!", kstr)
+		}
+		return nil
+	})
+	if err != nil {
+		if s.lg != nil {
+			s.lg.Panic("failed to verify meta bucket schema",
+				zap.Error(err))
+		} else {
+			plog.Fatal(err)
+		}
+	}
+
 	_, finishedCompactBytes := tx.UnsafeRange(metaBucketName, finishedCompactKeyName, nil, 0)
 	if len(finishedCompactBytes) != 0 {
 		s.revMu.Lock()

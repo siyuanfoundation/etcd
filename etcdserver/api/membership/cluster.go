@@ -787,10 +787,15 @@ func ValidateClusterAndAssignIDs(lg *zap.Logger, local *RaftCluster, existing *R
 }
 
 func mustDetectDowngrade(lg *zap.Logger, cv *semver.Version) {
+	if cv == nil {
+		return
+	}
 	lv := semver.Must(semver.NewVersion(version.Version))
 	// only keep major.minor version for comparison against cluster version
 	lv = &semver.Version{Major: lv.Major, Minor: lv.Minor}
-	if cv != nil && lv.LessThan(*cv) {
+	// allow 3.4 server to join 3.5 cluster version, since the data is mostly compatible.
+	allowedDowngradeVersion := &semver.Version{Major: cv.Major, Minor: cv.Minor - 1}
+	if lv.LessThan(*cv) && !lv.Equal(*allowedDowngradeVersion) {
 		if lg != nil {
 			lg.Fatal(
 				"invalid downgrade; server version is lower than determined cluster version",
