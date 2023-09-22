@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -43,126 +44,155 @@ func (s *fakeHealthServer) Alarms() []*pb.AlarmMember { return s.alarms }
 
 func (s *fakeHealthServer) ClientCertAuthEnabled() bool { return false }
 
+type healthzTestCase struct {
+	name             string
+	healthCheckURL   string
+	expectStatusCode int
+	inResult         []string
+	notInResult      []string
+
+	alarms   []*pb.AlarmMember
+	apiError error
+}
+
 // Test the basic logic flow in the handler.
 func TestHealthHandler(t *testing.T) {
 	mux := http.NewServeMux()
-	s := fakeHealthServer{}
-	handler, _ := NewHealthHandler(&s)
+	handler := &HealthHandler{
+		server:           &fakeHealthServer{},
+		healthCheckStore: make(map[string]HealthChecker),
+		healthzChecks:    []string{},
+		livezChecks:      []string{},
+		readyzChecks:     []string{},
+	}
 	logger := zaptest.NewLogger(t)
+	// Some helper functions
 	failedFunc := func(r *http.Request) error { return fmt.Errorf("Failed") }
 	succeededFunc := func(r *http.Request) error { return nil }
-	if err := handler.AddHealthCheck(NamedCheck("livez_only_1", succeededFunc), true, false); err != nil {
-		t.Errorf("failed to add livez check")
-		return
+	ableToAddCheck := func(expectSuccess bool, chk HealthChecker, isLivez bool, isReadyz bool) {
+		err := handler.AddHealthCheck(chk, isLivez, isReadyz)
+		if expectSuccess && err != nil {
+			t.Errorf("Expect being able to add check %s", chk.Name())
+		}
+		if !expectSuccess && err == nil {
+			t.Errorf("Expect not being able to add check %s", chk.Name())
+		}
 	}
-	if err := handler.AddHealthCheck(NamedCheck("livez_only_1", succeededFunc), false, false); err == nil {
-		t.Errorf("failed to check duplicate check name")
-	}
-	if err := handler.AddHealthCheck(NamedCheck("livez_readyz_1", succeededFunc), true, true); err != nil {
-		t.Errorf("failed to add readyz+livez check")
-		return
-	}
+	ableToAddCheck(true, NamedCheck("livez_only_1", succeededFunc), true, false)
+	ableToAddCheck(false, NamedCheck("livez_only_1", failedFunc), true, false)
+	ableToAddCheck(true, NamedCheck("livez_only_2", failedFunc), true, false)
+	ableToAddCheck(true, NamedCheck("livez_readyz_1", succeededFunc), true, true)
+
 	handler.installLivez(logger, mux)
-	if err := handler.AddHealthCheck(NamedCheck("livez_only_2", failedFunc), true, false); err == nil {
-		t.Errorf("should not be able to add more livez checks after installLivez")
-		return
-	}
-	if err := handler.AddHealthCheck(NamedCheck("livez_readyz_2", failedFunc), true, true); err == nil {
-		t.Errorf("should not be able to add more livez checks after installLivez")
-		return
-	}
-	if err := handler.AddHealthCheck(NamedCheck("readyz_only_1", succeededFunc), false, true); err != nil {
-		t.Errorf("failed to add readyz check")
-		return
-	}
+
+	ableToAddCheck(false, NamedCheck("livez_only_3", succeededFunc), true, false)
+	ableToAddCheck(false, NamedCheck("livez_readyz_2", succeededFunc), true, true)
+	ableToAddCheck(true, NamedCheck("readyz_only_1", succeededFunc), false, true)
+	ableToAddCheck(true, NamedCheck("readyz_only_2", failedFunc), false, true)
+
 	handler.installReadyz(logger, mux)
-	if err := handler.AddHealthCheck(NamedCheck("readyz_only_2", failedFunc), false, true); err == nil {
-		t.Errorf("should not be able to add more readyz checks after installReadyz")
-		return
-	}
-	if err := handler.AddHealthCheck(NamedCheck("livez_readyz_2", failedFunc), true, true); err == nil {
-		t.Errorf("should not be able to add more readyz checks after installReadyz")
-		return
-	}
-	if err := handler.AddHealthCheck(NamedCheck("non_livez_readyz_1", succeededFunc), false, false); err != nil {
-		t.Errorf("failed to add only healthz check")
-		return
-	}
+
+	ableToAddCheck(false, NamedCheck("readyz_only_3", succeededFunc), false, true)
+	ableToAddCheck(true, NamedCheck("neither_1", failedFunc), false, false)
+
 	handler.installHealthz(logger, mux)
-	if err := handler.AddHealthCheck(NamedCheck("non_livez_readyz_2", failedFunc), false, false); err == nil {
-		t.Errorf("should not be able to add more healthz checks after installHealthz")
+	ableToAddCheck(false, NamedCheck("neither_2", succeededFunc), false, false)
+
+	expectedLivezChecks := []string{"livez_only_1", "livez_only_2", "livez_readyz_1"}
+	if !reflect.DeepEqual(expectedLivezChecks, handler.livezChecks) {
+		t.Errorf("expectedLivezChecks: %v, but got: %v", expectedLivezChecks, handler.livezChecks)
+		return
+	}
+	expectedReadyzChecks := []string{"livez_readyz_1", "readyz_only_1", "readyz_only_2"}
+	if !reflect.DeepEqual(expectedReadyzChecks, handler.readyzChecks) {
+		t.Errorf("expectedReadyzChecks: %v, but got: %v", expectedReadyzChecks, handler.readyzChecks)
+		return
+	}
+	expectedHealthzChecks := []string{"livez_only_1", "livez_only_2", "livez_readyz_1", "readyz_only_1", "readyz_only_2", "neither_1"}
+	if !reflect.DeepEqual(expectedHealthzChecks, handler.healthzChecks) {
+		t.Errorf("expectedHealthzChecks: %v, but got: %v", expectedHealthzChecks, handler.healthzChecks)
 		return
 	}
 	ts := httptest.NewServer(mux)
 	defer ts.Close()
 
-	for _, healthCheckURL := range []string{"/livez", "/readyz", "/healthz"} {
-		checkHttpResponse(t, ts, healthCheckURL, http.StatusOK, nil, nil)
-	}
-	// Activate the alarms.
-	s.alarms = []*pb.AlarmMember{{MemberID: uint64(0), Alarm: pb.AlarmType_CORRUPT}}
-	tests := []struct {
-		name             string
-		healthCheckURL   string
-		expectStatusCode int
-		inResult         []string
-		notInResult      []string
-	}{
+	tests := []healthzTestCase{
 		{
-			name:             "Live if CORRUPT alarm is on",
+			name:             "livez not ok by default",
 			healthCheckURL:   "/livez",
-			expectStatusCode: http.StatusOK,
+			expectStatusCode: http.StatusInternalServerError,
+			inResult:         []string{"[+]livez_only_1 ok", "[-]livez_only_2 failed: reason withheld", "[+]livez_readyz_1 ok", "livez check failed"},
+			notInResult:      []string{"readyz_only_"},
 		},
 		{
-			name:             "Not ready if CORRUPT alarm is on",
+			name:             "readyz not ok by default",
 			healthCheckURL:   "/readyz",
 			expectStatusCode: http.StatusInternalServerError,
-			inResult:         []string{"[-]data_corruption failed: reason withheld", "[+]livez_readyz_1 ok", "[+]readyz_only_1 ok", "readyz check failed"},
+			inResult:         []string{"[+]readyz_only_1 ok", "[-]readyz_only_2 failed: reason withheld", "[+]livez_readyz_1 ok", "readyz check failed"},
 			notInResult:      []string{"livez_only_"},
 		},
 		{
-			name:             "Not healthy if CORRUPT alarm is on",
+			name:             "healthz not ok by default",
 			healthCheckURL:   "/healthz",
 			expectStatusCode: http.StatusInternalServerError,
-			inResult:         []string{"[-]data_corruption failed: reason withheld", "[+]livez_only_1 ok", "[+]livez_readyz_1 ok", "[+]readyz_only_1 ok", "[+]non_livez_readyz_1 ok", "healthz check failed"},
+			inResult:         []string{"[+]livez_only_1 ok", "[-]livez_only_2 failed: reason withheld", "[+]readyz_only_1 ok", "[-]readyz_only_2 failed: reason withheld", "[+]livez_readyz_1 ok", "[-]neither_1 failed: reason withheld", "healthz check failed"},
+		},
+		{
+			name:             "livez ok if exclude livez_only_2",
+			healthCheckURL:   "/livez?exclude=livez_only_2",
+			expectStatusCode: http.StatusOK,
+		},
+		{
+			name:             "livez ok if allowlist livez_only_1, livez_readyz_1",
+			healthCheckURL:   "/livez?verbose&allowlist=livez_only_1&allowlist=livez_readyz_1&allowlist=readyz_only_2",
+			expectStatusCode: http.StatusOK,
+			inResult:         []string{"[+]livez_only_1 ok", "[+]livez_only_2 not included: ok", "[+]livez_readyz_1 ok", "warn: some health checks cannot be included: no matches for \"readyz_only_2\"", "livez check passed"},
+		},
+		{
+			name:             "livez/livez_only_1 ok",
+			healthCheckURL:   "/livez/livez_only_1",
+			expectStatusCode: http.StatusOK,
+		},
+		{
+			name:             "livez/livez_only_2 not ok",
+			healthCheckURL:   "/livez/livez_only_2",
+			expectStatusCode: http.StatusInternalServerError,
+		},
+		{
+			name:             "livez/readyz_only_1 not a good url",
+			healthCheckURL:   "/livez/readyz_only_1",
+			expectStatusCode: http.StatusNotFound,
+		},
+		{
+			name:             "cannot specify both exclude and allowlist",
+			healthCheckURL:   "/livez?allowlist=livez_only_1&exclude=livez_readyz_1",
+			expectStatusCode: http.StatusBadRequest,
+		},
+		{
+			name:             "readyz ok if allowlist readyz_only_1",
+			healthCheckURL:   "/readyz?verbose&allowlist=livez_only_2&allowlist=readyz_only_1&allowlist=neither_1",
+			expectStatusCode: http.StatusOK,
+			inResult:         []string{"[+]readyz_only_1 ok", "[+]readyz_only_2 not included: ok", "[+]livez_readyz_1 not included: ok", "readyz check passed"},
+			notInResult:      []string{"]livez_only_2", "]neither_1"},
+		},
+		{
+			name:             "could allowlist both livez and healthz checks in healthz",
+			healthCheckURL:   "/healthz?allowlist=livez_only_1&allowlist=readyz_only_1&allowlist=neither_1",
+			expectStatusCode: http.StatusInternalServerError,
+			inResult:         []string{"[+]livez_only_1 ok", "[+]readyz_only_1 ok", "[+]livez_only_2 not included: ok", "[+]livez_readyz_1 not included: ok", "[-]neither_1 failed: reason withheld", "healthz check failed"},
 		},
 	}
 	for _, tt := range tests {
-		checkHttpResponse(t, ts, tt.healthCheckURL, tt.expectStatusCode, tt.inResult, tt.notInResult)
+		t.Run(tt.name, func(t *testing.T) {
+			checkHttpResponse(t, ts, tt.healthCheckURL, tt.expectStatusCode, tt.inResult, tt.notInResult)
+		})
 	}
 }
 
-func TestHealthzEndpoints(t *testing.T) {
-	// define the input and expected output
-	// input: alarms, and healthCheckURL
-	tests := []struct {
-		name           string
-		alarms         []*pb.AlarmMember
-		healthCheckURL string
-		apiError       error
-
-		expectStatusCode int
-	}{
+func TestDataCorruptionCheck(t *testing.T) {
+	tests := []healthzTestCase{
 		{
-			name:             "Healthy if no alarm",
-			alarms:           []*pb.AlarmMember{},
-			healthCheckURL:   "/healthz",
-			expectStatusCode: http.StatusOK,
-		},
-		{
-			name:             "Unhealthy if CORRUPT alarm is on",
-			alarms:           []*pb.AlarmMember{{MemberID: uint64(0), Alarm: pb.AlarmType_CORRUPT}},
-			healthCheckURL:   "/healthz",
-			expectStatusCode: http.StatusInternalServerError,
-		},
-		{
-			name:             "Healthy if CORRUPT alarm is on and excluded",
-			alarms:           []*pb.AlarmMember{{MemberID: uint64(0), Alarm: pb.AlarmType_CORRUPT}},
-			healthCheckURL:   "/healthz?exclude=data_corruption",
-			expectStatusCode: http.StatusOK,
-		},
-		{
-			name:             "Alive if CORRUPT alarm is on",
+			name:             "Live if CORRUPT alarm is on",
 			alarms:           []*pb.AlarmMember{{MemberID: uint64(0), Alarm: pb.AlarmType_CORRUPT}},
 			healthCheckURL:   "/livez",
 			expectStatusCode: http.StatusOK,
@@ -172,90 +202,92 @@ func TestHealthzEndpoints(t *testing.T) {
 			alarms:           []*pb.AlarmMember{{MemberID: uint64(0), Alarm: pb.AlarmType_CORRUPT}},
 			healthCheckURL:   "/readyz",
 			expectStatusCode: http.StatusInternalServerError,
+			inResult:         []string{"[-]data_corruption failed: reason withheld", "[+]ping ok", "readyz check failed"},
 		},
 		{
-			name:             "Ready if CORRUPT alarm is on and excluded",
+			name:             "healthz not ok if CORRUPT alarm is on",
 			alarms:           []*pb.AlarmMember{{MemberID: uint64(0), Alarm: pb.AlarmType_CORRUPT}},
+			healthCheckURL:   "/healthz",
+			expectStatusCode: http.StatusInternalServerError,
+			inResult:         []string{"[-]data_corruption failed: reason withheld", "[+]ping ok", "healthz check failed"},
+		},
+		{
+			name:             "ready if CORRUPT alarm is not on",
+			alarms:           []*pb.AlarmMember{{MemberID: uint64(0), Alarm: pb.AlarmType_NOSPACE}},
+			healthCheckURL:   "/readyz",
+			expectStatusCode: http.StatusOK,
+		},
+		{
+			name:             "ready if CORRUPT alarm is excluded",
+			alarms:           []*pb.AlarmMember{{MemberID: uint64(0), Alarm: pb.AlarmType_CORRUPT}, {MemberID: uint64(0), Alarm: pb.AlarmType_NOSPACE}},
 			healthCheckURL:   "/readyz?exclude=data_corruption",
 			expectStatusCode: http.StatusOK,
 		},
-		{
-			name:             "subpath ping ok if CORRUPT alarm is on",
-			alarms:           []*pb.AlarmMember{{MemberID: uint64(0), Alarm: pb.AlarmType_CORRUPT}},
-			healthCheckURL:   "/readyz/ping",
-			expectStatusCode: http.StatusOK,
-		},
-		{
-			name:             "subpath data_corruption not ok if CORRUPT alarm is on",
-			alarms:           []*pb.AlarmMember{{MemberID: uint64(0), Alarm: pb.AlarmType_CORRUPT}},
-			healthCheckURL:   "/readyz/data_corruption",
-			expectStatusCode: http.StatusInternalServerError,
-		},
-		{
-			name:             "Healthy if CORRUPT alarm is excluded",
-			alarms:           []*pb.AlarmMember{},
-			healthCheckURL:   "/healthz?exclude=data_corruption",
-			expectStatusCode: http.StatusOK,
-		},
-		{
-			name:             "Ready if multiple NOSPACE alarms are on",
-			alarms:           []*pb.AlarmMember{{MemberID: uint64(1), Alarm: pb.AlarmType_NOSPACE}, {MemberID: uint64(2), Alarm: pb.AlarmType_NOSPACE}, {MemberID: uint64(3), Alarm: pb.AlarmType_NOSPACE}},
-			healthCheckURL:   "/readyz",
-			expectStatusCode: http.StatusOK,
-		},
-		{
-			name:             "Bad request if both exclude and allowlist are specified",
-			alarms:           []*pb.AlarmMember{{MemberID: uint64(0), Alarm: pb.AlarmType_NOSPACE}, {MemberID: uint64(1), Alarm: pb.AlarmType_CORRUPT}},
-			healthCheckURL:   "/healthz?exclude=ping&allowlist=data_corruption",
-			expectStatusCode: http.StatusBadRequest,
-		},
-		{
-			name:             "Healthy even if authentication failed",
-			healthCheckURL:   "/healthz",
-			apiError:         auth.ErrUserEmpty,
-			expectStatusCode: http.StatusOK,
-		},
-		{
-			name:             "Healthy even if authorization failed",
-			healthCheckURL:   "/healthz",
-			apiError:         auth.ErrPermissionDenied,
-			expectStatusCode: http.StatusOK,
-		},
-		{
-			name:             "Unhealthy if range api is not available",
-			healthCheckURL:   "/livez",
-			apiError:         fmt.Errorf("Unexpected error"),
-			expectStatusCode: http.StatusInternalServerError,
-		},
-		{
-			name:             "Unhealthy if range api is not available",
-			healthCheckURL:   "/readyz",
-			apiError:         fmt.Errorf("Unexpected error"),
-			expectStatusCode: http.StatusInternalServerError,
-		},
-		{
-			name:             "Unhealthy if range api is not available",
-			healthCheckURL:   "/healthz",
-			apiError:         fmt.Errorf("Unexpected error"),
-			expectStatusCode: http.StatusInternalServerError,
-		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mux := http.NewServeMux()
-			handler, _ := NewHealthHandler(&fakeHealthServer{
-				alarms:   tt.alarms,
-				apiError: tt.apiError,
-			})
+			s := fakeHealthServer{}
+			handler, _ := NewHealthHandler(&s)
 			logger := zaptest.NewLogger(t)
 			handler.installLivez(logger, mux)
 			handler.installReadyz(logger, mux)
 			handler.installHealthz(logger, mux)
 			ts := httptest.NewServer(mux)
 			defer ts.Close()
+			checkHttpResponse(t, ts, tt.healthCheckURL, http.StatusOK, nil, nil)
+			// Activate the alarms.
+			s.alarms = tt.alarms
+			checkHttpResponse(t, ts, tt.healthCheckURL, tt.expectStatusCode, tt.inResult, tt.notInResult)
+		})
+	}
+}
 
-			checkHttpResponse(t, ts, tt.healthCheckURL, tt.expectStatusCode, nil, nil)
+func TestSerializableReadCheck(t *testing.T) {
+	tests := []healthzTestCase{
+		{
+			name:             "Alive even if authentication failed",
+			healthCheckURL:   "/livez",
+			apiError:         auth.ErrUserEmpty,
+			expectStatusCode: http.StatusOK,
+		},
+		{
+			name:             "Alive even if authorization failed",
+			healthCheckURL:   "/livez",
+			apiError:         auth.ErrPermissionDenied,
+			expectStatusCode: http.StatusOK,
+		},
+		{
+			name:             "Not alive if range api is not available",
+			healthCheckURL:   "/livez",
+			apiError:         fmt.Errorf("Unexpected error"),
+			expectStatusCode: http.StatusInternalServerError,
+		},
+		{
+			name:             "Not ready if range api is not available",
+			healthCheckURL:   "/readyz",
+			apiError:         fmt.Errorf("Unexpected error"),
+			expectStatusCode: http.StatusInternalServerError,
+		},
+		{
+			name:             "Unhealthy if range api is not available",
+			healthCheckURL:   "/healthz",
+			apiError:         fmt.Errorf("Unexpected error"),
+			expectStatusCode: http.StatusInternalServerError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			s := fakeHealthServer{apiError: tt.apiError}
+			handler, _ := NewHealthHandler(&s)
+			logger := zaptest.NewLogger(t)
+			handler.installLivez(logger, mux)
+			handler.installReadyz(logger, mux)
+			handler.installHealthz(logger, mux)
+			ts := httptest.NewServer(mux)
+			defer ts.Close()
+			checkHttpResponse(t, ts, tt.healthCheckURL, tt.expectStatusCode, tt.inResult, tt.notInResult)
 		})
 	}
 }
