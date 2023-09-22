@@ -33,6 +33,22 @@ type EtcdServerHealth interface {
 	Range(context.Context, *etcdserverpb.RangeRequest) (*etcdserverpb.RangeResponse, error)
 }
 
+// HealthChecker is a named healthz checker.
+type HealthChecker interface {
+	Name() string
+	Check(req *http.Request) error
+}
+
+func (s *EtcdServer) InstallLivezReadyz(lg *zap.Logger, mux mux) {
+	s.healthHandler.installLivez(lg, mux)
+	s.healthHandler.installReadyz(lg, mux)
+	s.healthHandler.installHealthz(lg, mux)
+}
+
+func (s *EtcdServer) AddHealthCheck(check HealthChecker, isLivez bool, isReadyz bool) error {
+	return s.healthHandler.addHealthCheck(check, isLivez, isReadyz)
+}
+
 type HealthHandler struct {
 	server EtcdServerHealth
 	// lock for health check related functions.
@@ -76,12 +92,6 @@ func (s stringSet) List() []string {
 		i++
 	}
 	return keys
-}
-
-// HealthChecker is a named healthz checker.
-type HealthChecker interface {
-	Name() string
-	Check(req *http.Request) error
 }
 
 // PingHealthz returns true automatically when checked
@@ -134,7 +144,7 @@ func checkAlarm(srv EtcdServerHealth, at etcdserverpb.AlarmType) error {
 
 func (h *HealthHandler) addDefaultHealthChecks() error {
 	// Checks that should be included both in livez and readyz.
-	h.AddHealthCheck(PingHealthz, true, true)
+	h.addHealthCheck(PingHealthz, true, true)
 	serializableReadCheck := NamedCheck("serializable_read", func(r *http.Request) error {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		_, err := h.server.Range(ctx, &etcdserverpb.RangeRequest{KeysOnly: true, Limit: 1, Serializable: true})
@@ -144,18 +154,18 @@ func (h *HealthHandler) addDefaultHealthChecks() error {
 		}
 		return nil
 	})
-	h.AddHealthCheck(serializableReadCheck, true, true)
+	h.addHealthCheck(serializableReadCheck, true, true)
 	// Checks that should be included only in livez.
 	// Checks that should be included only in readyz.
 	corruptionAlarmCheck := NamedCheck("data_corruption", func(r *http.Request) error {
 		return checkAlarm(h.server, etcdserverpb.AlarmType_CORRUPT)
 	})
-	h.AddHealthCheck(corruptionAlarmCheck, false, true)
+	h.addHealthCheck(corruptionAlarmCheck, false, true)
 	return nil
 }
 
-// AddHealthCheck allows you to add a HealthCheck to livez or readyz or both.
-func (h *HealthHandler) AddHealthCheck(check HealthChecker, isLivez bool, isReadyz bool) error {
+// addHealthCheck allows you to add a HealthCheck to livez or readyz or both.
+func (h *HealthHandler) addHealthCheck(check HealthChecker, isLivez bool, isReadyz bool) error {
 	h.healthMux.Lock()
 	defer h.healthMux.Unlock()
 	if _, found := h.healthCheckStore[check.Name()]; found {

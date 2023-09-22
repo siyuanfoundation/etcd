@@ -70,7 +70,7 @@ func TestHealthHandler(t *testing.T) {
 	failedFunc := func(r *http.Request) error { return fmt.Errorf("Failed") }
 	succeededFunc := func(r *http.Request) error { return nil }
 	ableToAddCheck := func(expectSuccess bool, chk HealthChecker, isLivez bool, isReadyz bool) {
-		err := handler.AddHealthCheck(chk, isLivez, isReadyz)
+		err := handler.addHealthCheck(chk, isLivez, isReadyz)
 		if expectSuccess && err != nil {
 			t.Errorf("Expect being able to add check %s", chk.Name())
 		}
