@@ -45,6 +45,8 @@ func NewEndpointCommand() *cobra.Command {
 	ec.AddCommand(newEpHealthCommand())
 	ec.AddCommand(newEpStatusCommand())
 	ec.AddCommand(newEpHashKVCommand())
+	ec.AddCommand(newEpLivezCommand())
+	ec.AddCommand(newEpReadyzCommand())
 
 	return ec
 }
@@ -54,6 +56,26 @@ func newEpHealthCommand() *cobra.Command {
 		Use:   "health",
 		Short: "Checks the healthiness of endpoints specified in `--endpoints` flag",
 		Run:   epHealthCommandFunc,
+	}
+
+	return cmd
+}
+
+func newEpLivezCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "livez",
+		Short: "Checks the livez of endpoints specified in `--endpoints` flag",
+		Run:   epHealthCheckCommandFunc(true),
+	}
+
+	return cmd
+}
+
+func newEpReadyzCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "readyz",
+		Short: "Checks the readyz of endpoints specified in `--endpoints` flag",
+		Run:   epHealthCheckCommandFunc(false),
 	}
 
 	return cmd
@@ -81,10 +103,11 @@ func newEpHashKVCommand() *cobra.Command {
 }
 
 type epHealth struct {
-	Ep     string `json:"endpoint"`
-	Health bool   `json:"health"`
-	Took   string `json:"took"`
-	Error  string `json:"error,omitempty"`
+	Ep          string `json:"endpoint"`
+	Health      bool   `json:"health"`
+	Took        string `json:"took"`
+	Error       string `json:"error,omitempty"`
+	DebugString string `json:"debugString,omitempty"`
 }
 
 // epHealthCommandFunc executes the "endpoint-health" command.
@@ -182,6 +205,91 @@ func epHealthCommandFunc(cmd *cobra.Command, args []string) {
 	display.EndpointHealth(healthList)
 	if errs {
 		cobrautl.ExitWithError(cobrautl.ExitError, fmt.Errorf("unhealthy cluster"))
+	}
+}
+
+// epHealthCheckCommandFunc executes the "endpoint-check" command.
+func epHealthCheckCommandFunc(isLivez bool) func(*cobra.Command, []string) {
+	return func(cmd *cobra.Command, args []string) {
+		lg, err := logutil.CreateDefaultZapLogger(zap.InfoLevel)
+		if err != nil {
+			cobrautl.ExitWithError(cobrautl.ExitError, err)
+		}
+		flags.SetPflagsFromEnv(lg, "ETCDCTL", cmd.InheritedFlags())
+		initDisplayFromCmd(cmd)
+
+		sec := secureCfgFromCmd(cmd)
+		dt := dialTimeoutFromCmd(cmd)
+		ka := keepAliveTimeFromCmd(cmd)
+		kat := keepAliveTimeoutFromCmd(cmd)
+		auth := authCfgFromCmd(cmd)
+		var cfgs []*clientv3.Config
+		for _, ep := range endpointsFromCluster(cmd) {
+			cfg, err := clientv3.NewClientConfig(&clientv3.ConfigSpec{
+				Endpoints:        []string{ep},
+				DialTimeout:      dt,
+				KeepAliveTime:    ka,
+				KeepAliveTimeout: kat,
+				Secure:           sec,
+				Auth:             auth,
+			}, lg)
+			if err != nil {
+				cobrautl.ExitWithError(cobrautl.ExitBadArgs, err)
+			}
+			cfgs = append(cfgs, cfg)
+		}
+
+		var wg sync.WaitGroup
+		hch := make(chan epHealth, len(cfgs))
+		for _, cfg := range cfgs {
+			wg.Add(1)
+			go func(cfg *clientv3.Config) {
+				defer wg.Done()
+				ep := cfg.Endpoints[0]
+				cfg.Logger = lg.Named("client")
+				cli, err := clientv3.New(*cfg)
+				if err != nil {
+					hch <- epHealth{Ep: ep, Health: false, Error: err.Error()}
+					return
+				}
+				st := time.Now()
+				ctx, cancel := commandCtx(cmd)
+				var resp *clientv3.HealthResponse
+				if isLivez {
+					resp, err = cli.Livez(ctx)
+				} else {
+					resp, err = cli.Readyz(ctx)
+				}
+				var eh epHealth
+				if err != nil {
+					eh = epHealth{Ep: ep, Error: err.Error(), Took: time.Since(st).String()}
+				} else {
+					eh = epHealth{Ep: ep, Health: resp.Ok, Took: time.Since(st).String(), DebugString: resp.Reason}
+				}
+				cancel()
+				hch <- eh
+			}(cfg)
+		}
+
+		wg.Wait()
+		close(hch)
+
+		errs := false
+		var healthList []epHealth
+		for h := range hch {
+			healthList = append(healthList, h)
+			if !h.Health {
+				errs = true
+			}
+		}
+		path := "/readyz"
+		if isLivez {
+			path = "/livez"
+		}
+		display.EndpointHealthCheck(healthList, path, true)
+		if errs {
+			cobrautl.ExitWithError(cobrautl.ExitError, fmt.Errorf("unhealthy cluster"))
+		}
 	}
 }
 

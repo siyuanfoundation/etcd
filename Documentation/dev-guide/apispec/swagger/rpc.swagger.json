@@ -1363,6 +1363,102 @@
         ]
       }
     },
+    "/v3/maintenance/healthz": {
+      "post": {
+        "operationId": "Maintenance_Healthz",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/etcdserverpbHealthResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/etcdserverpbHealthRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Maintenance"
+        ]
+      }
+    },
+    "/v3/maintenance/livez": {
+      "post": {
+        "operationId": "Maintenance_Livez",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/etcdserverpbHealthResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/etcdserverpbHealthRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Maintenance"
+        ]
+      }
+    },
+    "/v3/maintenance/readyz": {
+      "post": {
+        "operationId": "Maintenance_Readyz",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/etcdserverpbHealthResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/etcdserverpbHealthRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Maintenance"
+        ]
+      }
+    },
     "/v3/maintenance/snapshot": {
       "post": {
         "summary": "Snapshot sends a snapshot of the entire backend from a member over a stream to a client.",
@@ -1562,6 +1658,17 @@
         "DELETE"
       ],
       "default": "PUT"
+    },
+    "HealthRequestStringArray": {
+      "type": "object",
+      "properties": {
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     },
     "RangeRequestSortOrder": {
       "type": "string",
@@ -2206,6 +2313,33 @@
           "type": "integer",
           "format": "int64",
           "description": "hash is the hash value computed from the responding member's KV's backend."
+        }
+      }
+    },
+    "etcdserverpbHealthRequest": {
+      "type": "object",
+      "properties": {
+        "exclude": {
+          "$ref": "#/definitions/HealthRequestStringArray",
+          "description": "List of health checks to exclude."
+        },
+        "allowlist": {
+          "$ref": "#/definitions/HealthRequestStringArray",
+          "description": "List of health checks to allowlist.\nCannot be used with exclude."
+        }
+      }
+    },
+    "etcdserverpbHealthResponse": {
+      "type": "object",
+      "properties": {
+        "header": {
+          "$ref": "#/definitions/etcdserverpbResponseHeader"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
         }
       }
     },

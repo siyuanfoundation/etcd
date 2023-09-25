@@ -74,6 +74,18 @@ func (mp *maintenanceProxy) Alarm(ctx context.Context, r *pb.AlarmRequest) (*pb.
 	return mp.maintenanceClient.Alarm(ctx, r)
 }
 
+func (mp *maintenanceProxy) Livez(ctx context.Context, r *pb.HealthRequest) (*pb.HealthResponse, error) {
+	return mp.maintenanceClient.Livez(ctx, r)
+}
+
+func (mp *maintenanceProxy) Readyz(ctx context.Context, r *pb.HealthRequest) (*pb.HealthResponse, error) {
+	return mp.maintenanceClient.Readyz(ctx, r)
+}
+
+func (mp *maintenanceProxy) Healthz(ctx context.Context, r *pb.HealthRequest) (*pb.HealthResponse, error) {
+	return mp.maintenanceClient.Healthz(ctx, r)
+}
+
 func (mp *maintenanceProxy) Status(ctx context.Context, r *pb.StatusRequest) (*pb.StatusResponse, error) {
 	return mp.maintenanceClient.Status(ctx, r)
 }

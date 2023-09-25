@@ -207,6 +207,26 @@ service Maintenance {
     };
   }
 
+  
+  rpc Livez(HealthRequest) returns (HealthResponse) {
+      option (google.api.http) = {
+        post: "/v3/maintenance/livez"
+        body: "*"
+    };
+  }
+  rpc Readyz(HealthRequest) returns (HealthResponse) {
+      option (google.api.http) = {
+        post: "/v3/maintenance/readyz"
+        body: "*"
+    };
+  }
+  rpc Healthz(HealthRequest) returns (HealthResponse) {
+      option (google.api.http) = {
+        post: "/v3/maintenance/healthz"
+        body: "*"
+    };
+  }
+
   // Status gets the status of the member.
   rpc Status(StatusRequest) returns (StatusResponse) {
       option (google.api.http) = {
@@ -1128,6 +1148,28 @@ message AlarmResponse {
   ResponseHeader header = 1;
   // alarms is a list of alarms associated with the alarm request.
   repeated AlarmMember alarms = 2;
+}
+
+message HealthRequest {
+  message StringArray {
+    repeated string values = 1;
+  }
+  option (versionpb.etcd_version_msg) = "3.0";
+  oneof healthCheckSelector {
+    // List of health checks to exclude.
+    StringArray exclude = 1;
+    // List of health checks to allowlist.
+    // Cannot be used with exclude.
+    StringArray allowlist = 2;
+  }
+}
+
+message HealthResponse {
+  option (versionpb.etcd_version_msg) = "3.0";
+
+  ResponseHeader header = 1;
+  bool ok = 2;
+  string reason  = 3;
 }
 
 message DowngradeRequest {

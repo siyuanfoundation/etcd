@@ -34,6 +34,9 @@ func (tp *tablePrinter) MemberList(r v3.MemberListResponse) {
 	table.SetAlignment(tablewriter.ALIGN_RIGHT)
 	table.Render()
 }
+func (tp *tablePrinter) EndpointHealthCheck(r []epHealth, path string, verbose bool) {
+	tp.EndpointHealth(r)
+}
 func (tp *tablePrinter) EndpointHealth(r []epHealth) {
 	hdr, rows := makeEndpointHealthTable(r)
 	table := tablewriter.NewWriter(os.Stdout)

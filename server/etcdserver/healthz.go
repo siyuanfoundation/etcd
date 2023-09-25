@@ -60,6 +60,36 @@ func (s *EtcdServer) AddHealthCheck(check HealthChecker, isLivez bool, isReadyz 
 	return s.healthHandler.addHealthCheck(check, isLivez, isReadyz)
 }
 
+func (s *EtcdServer) CheckServerHealth(ctx context.Context, req *etcdserverpb.HealthRequest, path string) (*etcdserverpb.HealthResponse, error) {
+	resp := &etcdserverpb.HealthResponse{}
+	var healthCheckList []string
+	switch path {
+	case PathLivez:
+		healthCheckList = s.healthHandler.livezChecks
+	case PathReadyz:
+		healthCheckList = s.healthHandler.readyzChecks
+	default:
+		healthCheckList = s.healthHandler.healthzChecks
+	}
+	var excludeList, allowList []string
+	switch req.HealthCheckSelector.(type) {
+	case *etcdserverpb.HealthRequest_Exclude:
+		excludeList = req.GetExclude().Values
+	case *etcdserverpb.HealthRequest_Allowlist:
+		allowList = req.GetAllowlist().Values
+	}
+
+	failedChecks, individualCheckOutput, err := checkHealth(s.Logger().Sugar(), path, excludeList, allowList, s.healthHandler.getHealthChecksByNames(healthCheckList)...)
+	if err != nil {
+		return resp, err
+	}
+	if len(failedChecks) == 0 {
+		resp.Ok = true
+	}
+	resp.Reason = individualCheckOutput.String()
+	return resp, nil
+}
+
 type HealthHandler struct {
 	server EtcdServerHealth
 	// lock for health check related functions.
