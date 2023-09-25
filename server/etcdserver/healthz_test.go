@@ -55,7 +55,7 @@ type healthzTestCase struct {
 	apiError error
 }
 
-// Test the basic logic flow in the handler.
+// TestHealthHandler tests the basic logic flow in the handler.
 func TestHealthHandler(t *testing.T) {
 	mux := http.NewServeMux()
 	handler := &HealthHandler{
@@ -67,8 +67,8 @@ func TestHealthHandler(t *testing.T) {
 	}
 	logger := zaptest.NewLogger(t)
 	// Some helper functions
-	failedFunc := func(r *http.Request) error { return fmt.Errorf("Failed") }
-	succeededFunc := func(r *http.Request) error { return nil }
+	failedFunc := func() error { return fmt.Errorf("Failed") }
+	succeededFunc := func() error { return nil }
 	ableToAddCheck := func(expectSuccess bool, chk HealthChecker, isLivez bool, isReadyz bool) {
 		err := handler.addHealthCheck(chk, isLivez, isReadyz)
 		if expectSuccess && err != nil {

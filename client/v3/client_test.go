@@ -432,6 +432,18 @@ func (mm mockMaintenance) AlarmDisarm(ctx context.Context, m *AlarmMember) (*Ala
 	return nil, nil
 }
 
+func (mm mockMaintenance) Livez(ctx context.Context) (*HealthResponse, error) {
+	return nil, nil
+}
+
+func (mm mockMaintenance) Readyz(ctx context.Context) (*HealthResponse, error) {
+	return nil, nil
+}
+
+func (mm mockMaintenance) Healthz(ctx context.Context) (*HealthResponse, error) {
+	return nil, nil
+}
+
 func (mm mockMaintenance) Defragment(ctx context.Context, endpoint string) (*DefragmentResponse, error) {
 	return nil, nil
 }

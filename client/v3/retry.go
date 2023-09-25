@@ -198,6 +198,18 @@ func (rmc *retryMaintenanceClient) Alarm(ctx context.Context, in *pb.AlarmReques
 	return rmc.mc.Alarm(ctx, in, append(opts, withRetryPolicy(repeatable))...)
 }
 
+func (rmc *retryMaintenanceClient) Livez(ctx context.Context, in *pb.HealthRequest, opts ...grpc.CallOption) (resp *pb.HealthResponse, err error) {
+	return rmc.mc.Livez(ctx, in, append(opts, withRetryPolicy(repeatable))...)
+}
+
+func (rmc *retryMaintenanceClient) Readyz(ctx context.Context, in *pb.HealthRequest, opts ...grpc.CallOption) (resp *pb.HealthResponse, err error) {
+	return rmc.mc.Readyz(ctx, in, append(opts, withRetryPolicy(repeatable))...)
+}
+
+func (rmc *retryMaintenanceClient) Healthz(ctx context.Context, in *pb.HealthRequest, opts ...grpc.CallOption) (resp *pb.HealthResponse, err error) {
+	return rmc.mc.Healthz(ctx, in, append(opts, withRetryPolicy(repeatable))...)
+}
+
 func (rmc *retryMaintenanceClient) Status(ctx context.Context, in *pb.StatusRequest, opts ...grpc.CallOption) (resp *pb.StatusResponse, err error) {
 	return rmc.mc.Status(ctx, in, append(opts, withRetryPolicy(repeatable))...)
 }

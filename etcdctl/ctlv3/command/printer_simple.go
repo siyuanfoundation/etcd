@@ -162,6 +162,19 @@ func (s *simplePrinter) EndpointHealth(hs []epHealth) {
 	}
 }
 
+func (s *simplePrinter) EndpointHealthCheck(hs []epHealth, path string, verbose bool) {
+	for _, h := range hs {
+		if h.Health {
+			fmt.Printf("%s: %s is OK,: took = %v\n", h.Ep, path, h.Took)
+		} else {
+			fmt.Printf("%s: %s is OK,: took = %v, Error = %v\n", h.Ep, path, h.Took, h.Error)
+		}
+		if verbose {
+			fmt.Printf("%s\n", h.DebugString)
+		}
+	}
+}
+
 func (s *simplePrinter) EndpointStatus(statusList []epStatus) {
 	_, rows := makeEndpointStatusTable(statusList)
 	for _, row := range rows {

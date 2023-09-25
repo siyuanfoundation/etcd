@@ -30,6 +30,7 @@ type (
 	DefragmentResponse pb.DefragmentResponse
 	AlarmResponse      pb.AlarmResponse
 	AlarmMember        pb.AlarmMember
+	HealthResponse     pb.HealthResponse
 	StatusResponse     pb.StatusResponse
 	HashKVResponse     pb.HashKVResponse
 	MoveLeaderResponse pb.MoveLeaderResponse
@@ -50,6 +51,10 @@ type Maintenance interface {
 
 	// AlarmDisarm disarms a given alarm.
 	AlarmDisarm(ctx context.Context, m *AlarmMember) (*AlarmResponse, error)
+
+	Livez(ctx context.Context) (*HealthResponse, error)
+	Readyz(ctx context.Context) (*HealthResponse, error)
+	Healthz(ctx context.Context) (*HealthResponse, error)
 
 	// Defragment releases wasted space from internal fragmentation on a given etcd member.
 	// Defragment is only needed when deleting a large number of keys and want to reclaim
@@ -154,6 +159,33 @@ func (m *maintenance) AlarmList(ctx context.Context) (*AlarmResponse, error) {
 	resp, err := m.remote.Alarm(ctx, req, m.callOpts...)
 	if err == nil {
 		return (*AlarmResponse)(resp), nil
+	}
+	return nil, toErr(ctx, err)
+}
+
+func (m *maintenance) Livez(ctx context.Context) (*HealthResponse, error) {
+	req := &pb.HealthRequest{}
+	resp, err := m.remote.Livez(ctx, req, m.callOpts...)
+	if err == nil {
+		return (*HealthResponse)(resp), nil
+	}
+	return nil, toErr(ctx, err)
+}
+
+func (m *maintenance) Readyz(ctx context.Context) (*HealthResponse, error) {
+	req := &pb.HealthRequest{}
+	resp, err := m.remote.Readyz(ctx, req, m.callOpts...)
+	if err == nil {
+		return (*HealthResponse)(resp), nil
+	}
+	return nil, toErr(ctx, err)
+}
+
+func (m *maintenance) Healthz(ctx context.Context) (*HealthResponse, error) {
+	req := &pb.HealthRequest{}
+	resp, err := m.remote.Healthz(ctx, req, m.callOpts...)
+	if err == nil {
+		return (*HealthResponse)(resp), nil
 	}
 	return nil, toErr(ctx, err)
 }

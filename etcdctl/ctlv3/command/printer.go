@@ -46,6 +46,7 @@ type printer interface {
 	MemberList(v3.MemberListResponse)
 
 	EndpointHealth([]epHealth)
+	EndpointHealthCheck(hs []epHealth, path string, verbose bool)
 	EndpointStatus([]epStatus)
 	EndpointHashKV([]epHashKV)
 	MoveLeader(leader, target uint64, r v3.MoveLeaderResponse)
@@ -165,9 +166,10 @@ func newPrinterUnsupported(n string) printer {
 	return &printerUnsupported{printerRPC{nil, f}}
 }
 
-func (p *printerUnsupported) EndpointHealth([]epHealth) { p.p(nil) }
-func (p *printerUnsupported) EndpointStatus([]epStatus) { p.p(nil) }
-func (p *printerUnsupported) EndpointHashKV([]epHashKV) { p.p(nil) }
+func (p *printerUnsupported) EndpointHealth([]epHealth)                                    { p.p(nil) }
+func (p *printerUnsupported) EndpointHealthCheck(hs []epHealth, path string, verbose bool) { p.p(nil) }
+func (p *printerUnsupported) EndpointStatus([]epStatus)                                    { p.p(nil) }
+func (p *printerUnsupported) EndpointHashKV([]epHashKV)                                    { p.p(nil) }
 
 func (p *printerUnsupported) MoveLeader(leader, target uint64, r v3.MoveLeaderResponse) { p.p(nil) }
 func (p *printerUnsupported) DowngradeValidate(r v3.DowngradeResponse)                  { p.p(nil) }

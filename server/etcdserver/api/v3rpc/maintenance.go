@@ -51,6 +51,10 @@ type Alarmer interface {
 	Alarm(ctx context.Context, ar *pb.AlarmRequest) (*pb.AlarmResponse, error)
 }
 
+type HealthServer interface {
+	CheckServerHealth(ctx context.Context, req *pb.HealthRequest, path string) (*pb.HealthResponse, error)
+}
+
 type Downgrader interface {
 	Downgrade(ctx context.Context, dr *pb.DowngradeRequest) (*pb.DowngradeResponse, error)
 }
@@ -74,10 +78,11 @@ type maintenanceServer struct {
 	cs     ClusterStatusGetter
 	d      Downgrader
 	vs     serverversion.Server
+	hs     HealthServer
 }
 
 func NewMaintenanceServer(s *etcdserver.EtcdServer) pb.MaintenanceServer {
-	srv := &maintenanceServer{lg: s.Cfg.Logger, rg: s, hasher: s.KV().HashStorage(), bg: s, a: s, lt: s, hdr: newHeader(s), cs: s, d: s, vs: etcdserver.NewServerVersionAdapter(s)}
+	srv := &maintenanceServer{lg: s.Cfg.Logger, rg: s, hasher: s.KV().HashStorage(), bg: s, a: s, lt: s, hdr: newHeader(s), cs: s, d: s, vs: etcdserver.NewServerVersionAdapter(s), hs: s}
 	if srv.lg == nil {
 		srv.lg = zap.NewNop()
 	}
@@ -214,6 +219,42 @@ func (ms *maintenanceServer) HashKV(ctx context.Context, r *pb.HashKVRequest) (*
 
 func (ms *maintenanceServer) Alarm(ctx context.Context, ar *pb.AlarmRequest) (*pb.AlarmResponse, error) {
 	resp, err := ms.a.Alarm(ctx, ar)
+	if err != nil {
+		return nil, togRPCError(err)
+	}
+	if resp.Header == nil {
+		resp.Header = &pb.ResponseHeader{}
+	}
+	ms.hdr.fill(resp.Header)
+	return resp, nil
+}
+
+func (ms *maintenanceServer) Livez(ctx context.Context, req *pb.HealthRequest) (*pb.HealthResponse, error) {
+	resp, err := ms.hs.CheckServerHealth(ctx, req, etcdserver.PathLivez)
+	if err != nil {
+		return nil, togRPCError(err)
+	}
+	if resp.Header == nil {
+		resp.Header = &pb.ResponseHeader{}
+	}
+	ms.hdr.fill(resp.Header)
+	return resp, nil
+}
+
+func (ms *maintenanceServer) Readyz(ctx context.Context, req *pb.HealthRequest) (*pb.HealthResponse, error) {
+	resp, err := ms.hs.CheckServerHealth(ctx, req, etcdserver.PathReadyz)
+	if err != nil {
+		return nil, togRPCError(err)
+	}
+	if resp.Header == nil {
+		resp.Header = &pb.ResponseHeader{}
+	}
+	ms.hdr.fill(resp.Header)
+	return resp, nil
+}
+
+func (ms *maintenanceServer) Healthz(ctx context.Context, req *pb.HealthRequest) (*pb.HealthResponse, error) {
+	resp, err := ms.hs.CheckServerHealth(ctx, req, etcdserver.PathHealthz)
 	if err != nil {
 		return nil, togRPCError(err)
 	}

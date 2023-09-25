@@ -32,6 +32,18 @@ func (s *mts2mtc) Alarm(ctx context.Context, r *pb.AlarmRequest, opts ...grpc.Ca
 	return s.mts.Alarm(ctx, r)
 }
 
+func (s *mts2mtc) Livez(ctx context.Context, r *pb.HealthRequest, opts ...grpc.CallOption) (*pb.HealthResponse, error) {
+	return s.mts.Livez(ctx, r)
+}
+
+func (s *mts2mtc) Readyz(ctx context.Context, r *pb.HealthRequest, opts ...grpc.CallOption) (*pb.HealthResponse, error) {
+	return s.mts.Readyz(ctx, r)
+}
+
+func (s *mts2mtc) Healthz(ctx context.Context, r *pb.HealthRequest, opts ...grpc.CallOption) (*pb.HealthResponse, error) {
+	return s.mts.Healthz(ctx, r)
+}
+
 func (s *mts2mtc) Status(ctx context.Context, r *pb.StatusRequest, opts ...grpc.CallOption) (*pb.StatusResponse, error) {
 	return s.mts.Status(ctx, r)
 }

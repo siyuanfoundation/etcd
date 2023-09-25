@@ -36,9 +36,10 @@ func newJSONPrinter(isHex bool) printer {
 	}
 }
 
-func (p *jsonPrinter) EndpointHealth(r []epHealth) { printJSON(r) }
-func (p *jsonPrinter) EndpointStatus(r []epStatus) { printJSON(r) }
-func (p *jsonPrinter) EndpointHashKV(r []epHashKV) { printJSON(r) }
+func (p *jsonPrinter) EndpointHealth(r []epHealth)                                 { printJSON(r) }
+func (p *jsonPrinter) EndpointHealthCheck(r []epHealth, path string, verbose bool) { printJSON(r) }
+func (p *jsonPrinter) EndpointStatus(r []epStatus)                                 { printJSON(r) }
+func (p *jsonPrinter) EndpointHashKV(r []epHashKV)                                 { printJSON(r) }
 
 func (p *jsonPrinter) MemberList(r clientv3.MemberListResponse) {
 	if p.isHex {
