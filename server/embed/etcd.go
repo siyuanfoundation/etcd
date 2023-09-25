@@ -744,6 +744,7 @@ func (e *Etcd) serveClients() (err error) {
 	etcdhttp.HandleVersion(mux, e.Server)
 	etcdhttp.HandleMetrics(mux)
 	etcdhttp.HandleHealth(e.cfg.logger, mux, e.Server)
+	e.Server.InstallLivezReadyz(e.cfg.logger, mux)
 
 	var gopts []grpc.ServerOption
 	if e.cfg.GRPCKeepAliveMinTime > time.Duration(0) {

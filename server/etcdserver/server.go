@@ -294,6 +294,8 @@ type EtcdServer struct {
 	// Should only be set within apply code path. Used to force snapshot after cluster version downgrade.
 	forceSnapshot     bool
 	corruptionChecker CorruptionChecker
+
+	healthHandler *HealthHandler
 }
 
 // NewServer creates a new EtcdServer from the supplied configuration. The
@@ -390,6 +392,9 @@ func NewServer(cfg config.ServerConfig) (srv *EtcdServer, err error) {
 	}
 
 	if err = srv.restoreAlarms(); err != nil {
+		return nil, err
+	}
+	if srv.healthHandler, err = NewHealthHandler(srv); err != nil {
 		return nil, err
 	}
 	srv.uberApply = srv.NewUberApplier()
