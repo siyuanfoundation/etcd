@@ -15,10 +15,13 @@
 package etcdhttp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -40,12 +43,14 @@ type ServerHealth interface {
 	Leader() types.ID
 	Range(context.Context, *pb.RangeRequest) (*pb.RangeResponse, error)
 	Config() config.ServerConfig
+	ReadyNotify() <-chan struct{}
+	AuthStore() auth.AuthStore
 }
 
 // HandleHealth registers metrics and health handlers. it checks health by using v3 range request
 // and its corresponding timeout.
 func HandleHealth(lg *zap.Logger, mux *http.ServeMux, srv ServerHealth) {
-	mux.Handle(PathHealth, NewHealthHandler(lg, func(excludedAlarms AlarmSet, serializable bool) Health {
+	mux.Handle(PathHealth, NewHealthHandler(lg, func(excludedAlarms StringSet, serializable bool) Health {
 		if h := checkAlarms(lg, srv, excludedAlarms); h.Health != "true" {
 			return h
 		}
@@ -54,10 +59,13 @@ func HandleHealth(lg *zap.Logger, mux *http.ServeMux, srv ServerHealth) {
 		}
 		return checkAPI(lg, srv, serializable)
 	}))
+
+	installLivezEndpoints(lg, mux, srv)
+	installReayzEndpoints(lg, mux, srv)
 }
 
 // NewHealthHandler handles '/health' requests.
-func NewHealthHandler(lg *zap.Logger, hfunc func(excludedAlarms AlarmSet, Serializable bool) Health) http.HandlerFunc {
+func NewHealthHandler(lg *zap.Logger, hfunc func(excludedAlarms StringSet, Serializable bool) Health) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", http.MethodGet)
@@ -65,7 +73,7 @@ func NewHealthHandler(lg *zap.Logger, hfunc func(excludedAlarms AlarmSet, Serial
 			lg.Warn("/health error", zap.Int("status-code", http.StatusMethodNotAllowed))
 			return
 		}
-		excludedAlarms := getExcludedAlarms(r)
+		excludedAlarms := getQuerySet(r, "exclude")
 		// Passing the query parameter "serializable=true" ensures that the
 		// health of the local etcd is checked vs the health of the cluster.
 		// This is useful for probes attempting to validate the liveness of
@@ -88,6 +96,32 @@ func NewHealthHandler(lg *zap.Logger, hfunc func(excludedAlarms AlarmSet, Serial
 		w.WriteHeader(http.StatusOK)
 		w.Write(d)
 		lg.Debug("/health OK", zap.Int("status-code", http.StatusOK))
+	}
+}
+
+// newHealthHandler generates a http HandlerFunc for a health check function hfunc.
+func newHealthHandler(path string, lg *zap.Logger, hfunc func(*http.Request) (Health, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			lg.Warn("/health error", zap.Int("status-code", http.StatusMethodNotAllowed))
+			return
+		}
+		h, err := hfunc(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		d, _ := json.Marshal(h)
+		if h.Health != "true" {
+			http.Error(w, string(d), http.StatusServiceUnavailable)
+			lg.Warn("Health check error", zap.String("path", path), zap.String("output", string(d)), zap.Int("status-code", http.StatusServiceUnavailable))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write(d)
+		lg.Debug("Health check OK", zap.String("path", path), zap.String("output", string(d)), zap.Int("status-code", http.StatusOK))
 	}
 }
 
@@ -118,20 +152,18 @@ type Health struct {
 	Reason string `json:"reason"`
 }
 
-type AlarmSet map[string]struct{}
-
-func getExcludedAlarms(r *http.Request) (alarms AlarmSet) {
-	alarms = make(map[string]struct{}, 2)
-	alms, found := r.URL.Query()["exclude"]
+func getQuerySet(r *http.Request, query string) StringSet {
+	querySet := make(map[string]struct{})
+	qs, found := r.URL.Query()[query]
 	if found {
-		for _, alm := range alms {
-			if len(alm) == 0 {
+		for _, q := range qs {
+			if len(q) == 0 {
 				continue
 			}
-			alarms[alm] = struct{}{}
+			querySet[q] = struct{}{}
 		}
 	}
-	return alarms
+	return querySet
 }
 
 func getSerializableFlag(r *http.Request) bool {
@@ -140,7 +172,7 @@ func getSerializableFlag(r *http.Request) bool {
 
 // TODO: etcdserver.ErrNoLeader in health API
 
-func checkAlarms(lg *zap.Logger, srv ServerHealth, excludedAlarms AlarmSet) Health {
+func checkAlarms(lg *zap.Logger, srv ServerHealth, excludedAlarms StringSet) Health {
 	h := Health{Health: "true"}
 	as := srv.Alarms()
 	if len(as) > 0 {
@@ -192,4 +224,170 @@ func checkAPI(lg *zap.Logger, srv ServerHealth, serializable bool) Health {
 	}
 	lg.Debug("serving /health true")
 	return h
+}
+
+type HealthCheck func(ctx context.Context) error
+
+type CheckRegistry struct {
+	path string
+
+	checks map[string]HealthCheck
+	// the list of checkNames are needed to ensure the order of checks.
+	checkNames []string
+}
+
+func installLivezEndpoints(lg *zap.Logger, mux *http.ServeMux, server ServerHealth) {
+	reg := CheckRegistry{path: "/livez", checks: make(map[string]HealthCheck)}
+	reg.Register("serializable_read", serializableReadCheck(server))
+	reg.InstallHttpEndpoints(lg, mux)
+}
+
+func installReayzEndpoints(lg *zap.Logger, mux *http.ServeMux, server ServerHealth) {
+	reg := CheckRegistry{path: "/readyz", checks: make(map[string]HealthCheck)}
+	reg.Register("data_corruption", activeAlarmCheck(server, pb.AlarmType_CORRUPT))
+	reg.Register("serializable_read", serializableReadCheck(server))
+	reg.InstallHttpEndpoints(lg, mux)
+}
+
+func (reg *CheckRegistry) Register(name string, check HealthCheck) {
+	reg.checkNames = append(reg.checkNames, name)
+	reg.checks[name] = check
+}
+
+func (reg *CheckRegistry) InstallHttpEndpoints(lg *zap.Logger, mux *http.ServeMux) {
+	// installs the http handler for the root path.
+	reg.installHttpEndpoint(lg, mux, reg.path, reg.checkNames...)
+	for _, checkName := range reg.checkNames {
+		// installs the http handler for the individual check sub path.
+		reg.installHttpEndpoint(lg, mux, path.Join(reg.path, checkName), checkName)
+	}
+}
+
+func (reg *CheckRegistry) runHealthChecks(ctx context.Context, checkNames ...string) (Health, error) {
+	h := Health{Health: "true"}
+	failedChecks := []string{}
+	var individualCheckOutput bytes.Buffer
+	for _, checkName := range checkNames {
+		check, found := reg.checks[checkName]
+		if !found {
+			return h, fmt.Errorf("Health check: %s not registered", checkName)
+		}
+		if err := check(ctx); err != nil {
+			fmt.Fprintf(&individualCheckOutput, "[-]%s failed: %v\n", checkName, err)
+			failedChecks = append(failedChecks, checkName)
+		} else {
+			fmt.Fprintf(&individualCheckOutput, "[+]%s ok\n", checkName)
+		}
+	}
+	h.Reason = individualCheckOutput.String()
+	if len(failedChecks) > 0 {
+		h.Health = "false"
+	}
+	return h, nil
+}
+
+// installHttpEndpoint installs the http handler for the root path.
+func (reg *CheckRegistry) installHttpEndpoint(lg *zap.Logger, mux *http.ServeMux, path string, checks ...string) {
+	hfunc := func(r *http.Request) (Health, error) {
+		// extracts the health check names to be excludeList from the query param
+		excluded := getQuerySet(r, "exclude")
+		// extracts the health check names to be allowList from the query param
+		included := getQuerySet(r, "allowlist")
+
+		filteredCheckNames, err := filterCheckList(checks, included, excluded)
+		if err != nil {
+			return Health{Health: "false"}, err
+		}
+		return reg.runHealthChecks(r.Context(), filteredCheckNames...)
+	}
+	mux.Handle(path, newHealthHandler(path, lg, hfunc))
+}
+
+func filterCheckList(checks []string, included StringSet, excluded StringSet) (filteredList []string, err error) {
+	switch {
+	case len(excluded) > 0 && len(included) > 0:
+		return nil, fmt.Errorf("both an allowlist and an exclude list are specified in the query")
+	case len(excluded) > 0 && len(included) == 0:
+		return filterExcludedChecks(checks, excluded)
+	case len(excluded) == 0 && len(included) > 0:
+		return filterIncludedChecks(checks, included)
+	default:
+		return checks, nil
+	}
+}
+
+func filterExcludedChecks(checks []string, excluded StringSet) (filteredList []string, err error) {
+	for _, chk := range checks {
+		if _, found := excluded[chk]; found {
+			delete(excluded, chk)
+			continue
+		}
+		filteredList = append(filteredList, chk)
+	}
+	if len(excluded) > 0 {
+		return nil, fmt.Errorf("some health checks cannot be excluded: no matches for %s", formatQuoted(excluded.List()...))
+	}
+	return filteredList, nil
+}
+
+func filterIncludedChecks(checks []string, included StringSet) (filteredList []string, err error) {
+	for _, chk := range checks {
+		if _, found := included[chk]; found {
+			delete(included, chk)
+			filteredList = append(filteredList, chk)
+		}
+	}
+	if len(included) > 0 {
+		return nil, fmt.Errorf("some health checks cannot be included: no matches for %s", formatQuoted(included.List()...))
+	}
+	return filteredList, nil
+}
+
+// formatQuoted returns a formatted string of the health check names,
+// preserving the order passed in.
+func formatQuoted(names ...string) string {
+	quoted := make([]string, 0, len(names))
+	for _, name := range names {
+		quoted = append(quoted, fmt.Sprintf("%q", name))
+	}
+	return strings.Join(quoted, ",")
+}
+
+type StringSet map[string]struct{}
+
+func (s StringSet) List() []string {
+	keys := make([]string, 0, len(s))
+	for k := range s {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// activeAlarmCheck checks if a specific alarm type is active in the server.
+func activeAlarmCheck(srv ServerHealth, at pb.AlarmType) func(context.Context) error {
+	return func(ctx context.Context) error {
+		as := srv.Alarms()
+		for _, v := range as {
+			if v.Alarm == at {
+				return fmt.Errorf("Alarm active: %s", at.String())
+			}
+		}
+		return nil
+	}
+}
+
+func serializableReadCheck(srv ServerHealth) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		ctx = srv.AuthStore().WithRoot(ctx)
+		select {
+		// Range request could fail when the server is still bootstrapping, which does not mean there is anything wrong with the range read.
+		case <-srv.ReadyNotify():
+			_, err := srv.Range(ctx, &pb.RangeRequest{KeysOnly: true, Limit: 1, Serializable: true})
+			if err != nil {
+				return fmt.Errorf("RANGE ERROR: %s", err)
+			}
+		default:
+		}
+		return nil
+	}
 }
