@@ -68,6 +68,7 @@ type Backend interface {
 	Defrag() error
 	ForceCommit()
 	Close() error
+	IsDefragActive() bool
 
 	// SetTxPostLockInsideApplyHook sets a txPostLockInsideApplyHook.
 	SetTxPostLockInsideApplyHook(func())
@@ -126,7 +127,8 @@ type backend struct {
 	// txPostLockInsideApplyHook is called each time right after locking the tx.
 	txPostLockInsideApplyHook func()
 
-	lg *zap.Logger
+	lg             *zap.Logger
+	isDefragActive bool
 }
 
 type BackendConfig struct {
@@ -410,6 +412,10 @@ func (b *backend) SizeInUse() int64 {
 	return atomic.LoadInt64(&b.sizeInUse)
 }
 
+func (b *backend) IsDefragActive() bool {
+	return b.isDefragActive
+}
+
 func (b *backend) run() {
 	defer close(b.donec)
 	t := time.NewTimer(b.batchInterval)
@@ -459,6 +465,8 @@ func (b *backend) defrag() error {
 	// lock database after lock tx to avoid deadlock.
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	b.isDefragActive = true
+	defer func() { b.isDefragActive = false }()
 
 	// block concurrent read requests while resetting tx
 	b.readTx.Lock()

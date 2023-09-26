@@ -32,8 +32,10 @@ import (
 )
 
 type fakeHealthServer struct {
-	apiError error
-	alarms   []*pb.AlarmMember
+	apiError       error
+	alarms         []*pb.AlarmMember
+	isDefragActive bool
+	readIndexFail  bool
 }
 
 func (s *fakeHealthServer) Range(ctx context.Context, request *pb.RangeRequest) (*pb.RangeResponse, error) {
@@ -41,6 +43,17 @@ func (s *fakeHealthServer) Range(ctx context.Context, request *pb.RangeRequest) 
 }
 
 func (s *fakeHealthServer) Alarms() []*pb.AlarmMember { return s.alarms }
+
+func (s *fakeHealthServer) IsDefragActive() bool {
+	return s.isDefragActive
+}
+
+func (s *fakeHealthServer) CheckReadIndex() error {
+	if s.readIndexFail {
+		return fmt.Errorf("Failed to get ReadIndex")
+	}
+	return nil
+}
 
 func (s *fakeHealthServer) ClientCertAuthEnabled() bool { return false }
 
@@ -51,8 +64,10 @@ type healthzTestCase struct {
 	inResult         []string
 	notInResult      []string
 
-	alarms   []*pb.AlarmMember
-	apiError error
+	alarms         []*pb.AlarmMember
+	apiError       error
+	isDefragActive bool
+	readIndexFail  bool
 }
 
 // TestHealthHandler tests the basic logic flow in the handler.
@@ -280,6 +295,104 @@ func TestSerializableReadCheck(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mux := http.NewServeMux()
 			s := fakeHealthServer{apiError: tt.apiError}
+			handler, _ := NewHealthHandler(&s)
+			logger := zaptest.NewLogger(t)
+			handler.installLivez(logger, mux)
+			handler.installReadyz(logger, mux)
+			handler.installHealthz(logger, mux)
+			ts := httptest.NewServer(mux)
+			defer ts.Close()
+			checkHttpResponse(t, ts, tt.healthCheckURL, tt.expectStatusCode, tt.inResult, tt.notInResult)
+		})
+	}
+}
+
+func TestDefragCheck(t *testing.T) {
+	tests := []healthzTestCase{
+		{
+			name:             "Alive when defrag is not active",
+			healthCheckURL:   "/livez",
+			expectStatusCode: http.StatusOK,
+		},
+		{
+			name:             "Alive when defrag is active",
+			healthCheckURL:   "/livez",
+			isDefragActive:   true,
+			expectStatusCode: http.StatusOK,
+		},
+		{
+			name:             "Ready when defrag is not active",
+			healthCheckURL:   "/readyz",
+			expectStatusCode: http.StatusOK,
+		},
+		{
+			name:             "Not ready when defrag is active",
+			healthCheckURL:   "/readyz",
+			isDefragActive:   true,
+			expectStatusCode: http.StatusInternalServerError,
+			inResult:         []string{"[-]defrag_active failed: reason withheld", "[+]ping ok", "readyz check failed"},
+		},
+		{
+			name:             "Unhealthy when defrag is active",
+			healthCheckURL:   "/healthz",
+			isDefragActive:   true,
+			expectStatusCode: http.StatusInternalServerError,
+			inResult:         []string{"[-]defrag_active failed: reason withheld", "[+]ping ok", "healthz check failed"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			s := fakeHealthServer{apiError: tt.apiError, isDefragActive: tt.isDefragActive}
+			handler, _ := NewHealthHandler(&s)
+			logger := zaptest.NewLogger(t)
+			handler.installLivez(logger, mux)
+			handler.installReadyz(logger, mux)
+			handler.installHealthz(logger, mux)
+			ts := httptest.NewServer(mux)
+			defer ts.Close()
+			checkHttpResponse(t, ts, tt.healthCheckURL, tt.expectStatusCode, tt.inResult, tt.notInResult)
+		})
+	}
+}
+
+func TestReadIndexCheck(t *testing.T) {
+	tests := []healthzTestCase{
+		{
+			name:             "Alive when readIndex is ok",
+			healthCheckURL:   "/livez",
+			expectStatusCode: http.StatusOK,
+		},
+		{
+			name:             "Alive when readIndex is not ok",
+			healthCheckURL:   "/livez",
+			readIndexFail:    true,
+			expectStatusCode: http.StatusOK,
+		},
+		{
+			name:             "Ready when readIndex is ok",
+			healthCheckURL:   "/readyz",
+			expectStatusCode: http.StatusOK,
+		},
+		{
+			name:             "Not ready when readIndex is not ok",
+			healthCheckURL:   "/readyz",
+			readIndexFail:    true,
+			expectStatusCode: http.StatusInternalServerError,
+			inResult:         []string{"[-]read_index failed: reason withheld", "[+]ping ok", "readyz check failed"},
+		},
+		{
+			name:             "Unhealthy when readIndex is not ok",
+			healthCheckURL:   "/healthz",
+			readIndexFail:    true,
+			expectStatusCode: http.StatusInternalServerError,
+			inResult:         []string{"[-]read_index failed: reason withheld", "[+]ping ok", "healthz check failed"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			s := fakeHealthServer{apiError: tt.apiError, readIndexFail: tt.readIndexFail}
 			handler, _ := NewHealthHandler(&s)
 			logger := zaptest.NewLogger(t)
 			handler.installLivez(logger, mux)

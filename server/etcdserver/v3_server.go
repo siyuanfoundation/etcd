@@ -782,10 +782,14 @@ func (s *EtcdServer) linearizableReadLoop() {
 	for {
 		requestId := s.reqIDGen.Next()
 		leaderChangedNotifier := s.leaderChanged.Receive()
+		readIndexOnly := false
 		select {
 		case <-leaderChangedNotifier:
 			continue
 		case <-s.readwaitc:
+			readIndexOnly = false
+		case <-s.readIndexWaitc:
+			readIndexOnly = true
 		case <-s.stopping:
 			return
 		}
@@ -796,8 +800,14 @@ func (s *EtcdServer) linearizableReadLoop() {
 
 		nextnr := newNotifier()
 		s.readMu.Lock()
-		nr := s.readNotifier
-		s.readNotifier = nextnr
+		var nr *notifier
+		if readIndexOnly {
+			nr = s.readIndexNotifier
+			s.readIndexNotifier = nextnr
+		} else {
+			nr = s.readNotifier
+			s.readNotifier = nextnr
+		}
 		s.readMu.Unlock()
 
 		confirmedIndex, err := s.requestCurrentIndex(leaderChangedNotifier, requestId)
@@ -812,6 +822,11 @@ func (s *EtcdServer) linearizableReadLoop() {
 		trace.Step("read index received")
 
 		trace.AddField(traceutil.Field{Key: "readStateIndex", Value: confirmedIndex})
+
+		if readIndexOnly {
+			nr.notify(nil)
+			continue
+		}
 
 		appliedIndex := s.getAppliedIndex()
 		trace.AddField(traceutil.Field{Key: "appliedIndex", Value: strconv.FormatUint(appliedIndex, 10)})
@@ -947,6 +962,29 @@ func (s *EtcdServer) linearizableReadNotify(ctx context.Context) error {
 	default:
 	}
 
+	// wait for read state notification
+	select {
+	case <-nc.c:
+		return nc.err
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-s.done:
+		return errors.ErrStopped
+	}
+}
+
+// CheckReadIndex checks if the server can successfully get ReadIndex.
+func (s *EtcdServer) CheckReadIndex() error {
+	ctx := context.WithValue(s.ctx, traceutil.StartTimeKey{}, time.Now())
+	s.readMu.RLock()
+	nc := s.readIndexNotifier
+	s.readMu.RUnlock()
+
+	// signal linearizable loop for current notify if it hasn't been already
+	select {
+	case s.readIndexWaitc <- struct{}{}:
+	default:
+	}
 	// wait for read state notification
 	select {
 	case <-nc.c:

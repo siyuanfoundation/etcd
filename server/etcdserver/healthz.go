@@ -38,6 +38,8 @@ const (
 type EtcdServerHealth interface {
 	Alarms() []*etcdserverpb.AlarmMember
 	Range(context.Context, *etcdserverpb.RangeRequest) (*etcdserverpb.RangeResponse, error)
+	IsDefragActive() bool
+	CheckReadIndex() error
 }
 
 // HealthChecker is a named healthz checker.
@@ -48,6 +50,10 @@ type HealthChecker interface {
 
 type healthLogger interface {
 	Infof(template string, args ...interface{})
+}
+
+func (s *EtcdServer) IsDefragActive() bool {
+	return s.be.IsDefragActive()
 }
 
 func (s *EtcdServer) InstallLivezReadyz(lg *zap.Logger, mux mux) {
@@ -188,6 +194,20 @@ func (h *HealthHandler) addDefaultHealthChecks() error {
 		return checkAlarm(h.server, etcdserverpb.AlarmType_CORRUPT)
 	})
 	h.addHealthCheck(corruptionAlarmCheck, false, true)
+
+	degragCheck := NamedCheck("defrag_active", func() error {
+		if h.server.IsDefragActive() {
+			return fmt.Errorf("Active Defragmentation")
+		}
+		return nil
+	})
+	h.addHealthCheck(degragCheck, false, true)
+
+	readIndexCheck := NamedCheck("read_index", func() error {
+		return h.server.CheckReadIndex()
+	})
+	h.addHealthCheck(readIndexCheck, false, true)
+
 	return nil
 }
 
@@ -319,7 +339,7 @@ func checkHealth(lg healthLogger, name string, excludeList []string, allowList [
 	// failedVerboseLogOutput is for output to the log.  It indicates detailed failed output information for the log.
 	var failedVerboseLogOutput bytes.Buffer
 	for _, check := range checks {
-		if len(included) > 0 {
+		if len(allowList) > 0 {
 			if _, found := included[check.Name()]; !found {
 				fmt.Fprintf(&individualCheckOutput, "[+]%s not included: ok\n", check.Name())
 				continue

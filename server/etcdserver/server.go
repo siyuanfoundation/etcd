@@ -229,6 +229,13 @@ type EtcdServer struct {
 	// when there is no error
 	readNotifier *notifier
 
+	// readIndex checker notifies etcd server that it waits for checking the read index by sending an empty struct to
+	// readIndexWaitc
+	readIndexWaitc chan struct{}
+	// readIndexNotifier is used to notify the readIndex checker that it can get the read index
+	// when there is no error
+	readIndexNotifier *notifier
+
 	// stop signals the run goroutine should shutdown.
 	stop chan struct{}
 	// stopping is closed by run goroutine on shutdown.
@@ -569,6 +576,8 @@ func (s *EtcdServer) start() {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.readwaitc = make(chan struct{}, 1)
 	s.readNotifier = newNotifier()
+	s.readIndexWaitc = make(chan struct{}, 1)
+	s.readIndexNotifier = newNotifier()
 	s.leaderChanged = notify.NewNotifier()
 	if s.ClusterVersion() != nil {
 		lg.Info(
