@@ -40,7 +40,6 @@ type fakeHealthServer struct {
 	fakeServer
 	apiError      error
 	missingLeader bool
-	readych       chan struct{}
 	authStore     auth.AuthStore
 }
 
@@ -57,10 +56,6 @@ func (s *fakeHealthServer) Leader() types.ID {
 		return 1
 	}
 	return types.ID(raft.None)
-}
-
-func (s *fakeHealthServer) ReadyNotify() <-chan struct{} {
-	return s.readych
 }
 
 func (s *fakeHealthServer) AuthStore() auth.AuthStore {
@@ -232,7 +227,6 @@ func TestDataCorruptionCheck(t *testing.T) {
 			mux := http.NewServeMux()
 			logger := zaptest.NewLogger(t)
 			s := &fakeHealthServer{
-				readych:   make(chan struct{}),
 				authStore: auth.NewAuthStore(logger, schema.NewAuthBackend(logger, be), nil, 0),
 			}
 			HandleHealth(logger, mux, s)
@@ -288,15 +282,11 @@ func TestSerializableReadCheck(t *testing.T) {
 			logger := zaptest.NewLogger(t)
 			s := &fakeHealthServer{
 				apiError:  tt.apiError,
-				readych:   make(chan struct{}),
 				authStore: auth.NewAuthStore(logger, schema.NewAuthBackend(logger, be), nil, 0),
 			}
 			HandleHealth(logger, mux, s)
 			ts := httptest.NewServer(mux)
 			defer ts.Close()
-			// Skips checking serializable read before ReadyNotify
-			checkHttpResponse(t, ts, tt.healthCheckURL, http.StatusOK, nil, nil)
-			close(s.readych)
 			checkHttpResponse(t, ts, tt.healthCheckURL, tt.expectStatusCode, tt.inResult, tt.notInResult)
 		})
 	}
@@ -347,10 +337,8 @@ func TestExcludeAndAllowlist(t *testing.T) {
 			logger := zaptest.NewLogger(t)
 			s := &fakeHealthServer{
 				apiError:  tt.apiError,
-				readych:   make(chan struct{}),
 				authStore: auth.NewAuthStore(logger, schema.NewAuthBackend(logger, be), nil, 0),
 			}
-			close(s.readych)
 			HandleHealth(logger, mux, s)
 			ts := httptest.NewServer(mux)
 			defer ts.Close()

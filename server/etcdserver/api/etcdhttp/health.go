@@ -43,7 +43,6 @@ type ServerHealth interface {
 	Leader() types.ID
 	Range(context.Context, *pb.RangeRequest) (*pb.RangeResponse, error)
 	Config() config.ServerConfig
-	ReadyNotify() <-chan struct{}
 	AuthStore() auth.AuthStore
 }
 
@@ -270,7 +269,7 @@ func (reg *CheckRegistry) runHealthChecks(ctx context.Context, checkNames ...str
 	for _, checkName := range checkNames {
 		check, found := reg.checks[checkName]
 		if !found {
-			return h, fmt.Errorf("Health check: %s not registered", checkName)
+			return Health{Health: "false"}, fmt.Errorf("Health check: %s not registered", checkName)
 		}
 		if err := check(ctx); err != nil {
 			fmt.Fprintf(&individualCheckOutput, "[-]%s failed: %v\n", checkName, err)
@@ -379,14 +378,9 @@ func activeAlarmCheck(srv ServerHealth, at pb.AlarmType) func(context.Context) e
 func serializableReadCheck(srv ServerHealth) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		ctx = srv.AuthStore().WithRoot(ctx)
-		select {
-		// Range request could fail when the server is still bootstrapping, which does not mean there is anything wrong with the range read.
-		case <-srv.ReadyNotify():
-			_, err := srv.Range(ctx, &pb.RangeRequest{KeysOnly: true, Limit: 1, Serializable: true})
-			if err != nil {
-				return fmt.Errorf("RANGE ERROR: %s", err)
-			}
-		default:
+		_, err := srv.Range(ctx, &pb.RangeRequest{Key: []byte("\x00"), RangeEnd: []byte("\x00"), KeysOnly: true, Limit: 1, Serializable: true})
+		if err != nil {
+			return fmt.Errorf("RANGE ERROR: %s", err)
 		}
 		return nil
 	}
