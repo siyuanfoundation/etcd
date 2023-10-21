@@ -153,7 +153,7 @@ type Config struct {
 	Dir    string `json:"data-dir"`
 	WalDir string `json:"wal-dir"`
 
-	SnapshotCount uint64 `json:"snapshot-count"`
+	SnapshotCount uint64 `json:"snapshot-count" randomize:"randomNumber:100,200"`
 
 	// SnapshotCatchUpEntries is the number of entries for a slow follower
 	// to catch-up after compacting the raft storage entries.
