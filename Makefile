@@ -60,6 +60,10 @@ test-robustness:
 fuzz: 
 	./scripts/fuzzing.sh
 
+.PHONY: codegen
+codegen: 
+	./scripts/codegen.sh	
+
 # Static analysis
 
 verify: verify-gofmt verify-bom verify-lint verify-dep verify-shellcheck verify-goword \

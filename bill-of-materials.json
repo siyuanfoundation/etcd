@@ -90,6 +90,15 @@
 		]
 	},
 	{
+		"project": "github.com/dave/jennifer/jen",
+		"licenses": [
+			{
+				"type": "MIT License",
+				"confidence": 1
+			}
+		]
+	},
+	{
 		"project": "github.com/davecgh/go-spew/spew",
 		"licenses": [
 			{
