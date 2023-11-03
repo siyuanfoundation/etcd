@@ -15,9 +15,12 @@
 package options
 
 import (
+	"encoding/json"
+	"fmt"
 	"math/rand"
 	"time"
 
+	"go.etcd.io/etcd/server/v3/embed"
 	"go.etcd.io/etcd/tests/v3/framework/e2e"
 )
 
@@ -44,4 +47,34 @@ func (opts *ClusterOptions) WithClusterOptions(input ...*ClusterOptions) *Cluste
 	}
 	*opts = append(*opts, f)
 	return opts
+}
+
+// PrintNonDefaultServerConfig the fields in cfg that are not set by default.
+func PrintNonDefaultServerConfig(cfg embed.Config) error {
+	cfgDefault := *embed.NewConfig()
+
+	s1, err1 := json.Marshal(cfg)
+	s2, err2 := json.Marshal(cfgDefault)
+	if err1 != nil || err2 != nil {
+		return fmt.Errorf("sizhangDebug: failed to convert embed.Config to json")
+	}
+	// a map container to decode the JSON structure into
+	c1 := make(map[string]json.RawMessage)
+	c2 := make(map[string]json.RawMessage)
+	// unmarschal JSON
+	err1 = json.Unmarshal(s1, &c1)
+	err2 = json.Unmarshal(s2, &c2)
+	// panic on error
+	if err1 != nil || err2 != nil {
+		return fmt.Errorf("sizhangDebug: failed to parse embed.Config json")
+	}
+	fmt.Printf("-----------------------------\nsizhangDebug: cluster ServerConfig = {\n")
+	for k, v := range c1 {
+		v2, ok := c2[k]
+		if ok && string(v2) != string(v) {
+			fmt.Printf("sizhangDebug: %s = %s\n", k, string(v))
+		}
+	}
+	fmt.Printf("sizhangDebug: }\n-----------------------------\n")
+	return nil
 }

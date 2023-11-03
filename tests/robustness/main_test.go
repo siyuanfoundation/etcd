@@ -16,6 +16,7 @@ package robustness
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"go.etcd.io/etcd/tests/v3/robustness/failpoint"
 	"go.etcd.io/etcd/tests/v3/robustness/identity"
 	"go.etcd.io/etcd/tests/v3/robustness/model"
+	"go.etcd.io/etcd/tests/v3/robustness/options"
 	"go.etcd.io/etcd/tests/v3/robustness/report"
 	"go.etcd.io/etcd/tests/v3/robustness/traffic"
 	"go.etcd.io/etcd/tests/v3/robustness/validate"
@@ -42,6 +44,8 @@ func TestMain(m *testing.M) {
 func TestRobustness(t *testing.T) {
 	testRunner.BeforeTest(t)
 	for _, scenario := range scenarios(t) {
+		fmt.Printf("sizhangDebug: scenarioName = %s\n", scenario.name)
+		options.PrintNonDefaultServerConfig(scenario.cluster.ServerConfig)
 		t.Run(scenario.name, func(t *testing.T) {
 			lg := zaptest.NewLogger(t)
 			scenario.cluster.Logger = lg

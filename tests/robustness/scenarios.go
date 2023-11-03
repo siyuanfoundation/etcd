@@ -22,6 +22,7 @@ import (
 	"go.etcd.io/etcd/api/v3/version"
 	"go.etcd.io/etcd/tests/v3/framework/e2e"
 	"go.etcd.io/etcd/tests/v3/robustness/failpoint"
+	"go.etcd.io/etcd/tests/v3/robustness/options"
 	"go.etcd.io/etcd/tests/v3/robustness/traffic"
 )
 
@@ -64,12 +65,10 @@ func scenarios(t *testing.T) []testScenario {
 		t.Fatalf("Failed checking etcd version binary, binary: %q, err: %v", e2e.BinPath.Etcd, err)
 	}
 	enableLazyFS := e2e.BinPath.LazyFSAvailable()
-	baseOptions := []e2e.EPClusterOption{
-		e2e.WithSnapshotCount(100),
+	baseOptions := options.ClusterOptions{
 		e2e.WithGoFailEnabled(true),
-		e2e.WithCompactionBatchLimit(100),
-		e2e.WithWatchProcessNotifyInterval(100 * time.Millisecond),
 	}
+	baseOptions.WithSnapshotCount(100, 200).WithExperimentalCompactionBatchLimit(100, 200).WithExperimentalWatchProgressNotifyInterval(50*time.Millisecond, 100*time.Millisecond, 200*time.Millisecond)
 	scenarios := []testScenario{}
 	for _, tp := range trafficProfiles {
 		name := filepath.Join(tp.Traffic.Name(), tp.Profile.Name, "ClusterOfSize1")
