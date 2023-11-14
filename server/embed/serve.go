@@ -92,6 +92,7 @@ func newServeCtx(lg *zap.Logger) *serveCtx {
 // read requests and then call handler to reply to them.
 func (sctx *serveCtx) serve(
 	s *etcdserver.EtcdServer,
+	healthNotifier v3rpc.HealthNotifier,
 	tlsinfo *transport.TLSInfo,
 	handler http.Handler,
 	errHandler func(error),
@@ -150,7 +151,7 @@ func (sctx *serveCtx) serve(
 			}
 		}
 		if grpcEnabled {
-			gs = v3rpc.Server(s, nil, nil, gopts...)
+			gs = v3rpc.Server(s, healthNotifier, nil, nil, gopts...)
 			v3electionpb.RegisterElectionServer(gs, servElection)
 			v3lockpb.RegisterLockServer(gs, servLock)
 			if sctx.serviceRegister != nil {
@@ -202,7 +203,7 @@ func (sctx *serveCtx) serve(
 		}
 
 		if grpcEnabled {
-			gs = v3rpc.Server(s, tlscfg, nil, gopts...)
+			gs = v3rpc.Server(s, healthNotifier, tlscfg, nil, gopts...)
 			v3electionpb.RegisterElectionServer(gs, servElection)
 			v3lockpb.RegisterLockServer(gs, servLock)
 			if sctx.serviceRegister != nil {

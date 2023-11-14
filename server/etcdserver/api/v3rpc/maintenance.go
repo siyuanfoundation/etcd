@@ -75,10 +75,10 @@ type maintenanceServer struct {
 	d      Downgrader
 	vs     serverversion.Server
 
-	healthNotifier notifier
+	healthNotifier HealthNotifier
 }
 
-func NewMaintenanceServer(s *etcdserver.EtcdServer, healthNotifier notifier) pb.MaintenanceServer {
+func NewMaintenanceServer(s *etcdserver.EtcdServer, healthNotifier HealthNotifier) pb.MaintenanceServer {
 	srv := &maintenanceServer{lg: s.Cfg.Logger, rg: s, hasher: s.KV().HashStorage(), bg: s, a: s, lt: s, hdr: newHeader(s), cs: s, d: s, vs: etcdserver.NewServerVersionAdapter(s), healthNotifier: healthNotifier}
 	if srv.lg == nil {
 		srv.lg = zap.NewNop()

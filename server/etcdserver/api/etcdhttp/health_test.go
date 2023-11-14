@@ -62,6 +62,14 @@ func (s *fakeHealthServer) AuthStore() auth.AuthStore { return s.authStore }
 
 func (s *fakeHealthServer) ClientCertAuthEnabled() bool { return false }
 
+type fakeNotifier struct {
+	isDefragActive bool
+}
+
+func (n *fakeNotifier) IsDefragActive() bool {
+	return n.isDefragActive
+}
+
 type healthTestCase struct {
 	name             string
 	healthCheckURL   string
@@ -69,9 +77,10 @@ type healthTestCase struct {
 	inResult         []string
 	notInResult      []string
 
-	alarms        []*pb.AlarmMember
-	apiError      error
-	missingLeader bool
+	alarms         []*pb.AlarmMember
+	apiError       error
+	missingLeader  bool
+	isDefragActive bool
 }
 
 func TestHealthHandler(t *testing.T) {
@@ -151,7 +160,7 @@ func TestHealthHandler(t *testing.T) {
 				apiError:      tt.apiError,
 				missingLeader: tt.missingLeader,
 				authStore:     auth.NewAuthStore(lg, schema.NewAuthBackend(lg, be), nil, 0),
-			})
+			}, &fakeNotifier{isDefragActive: tt.isDefragActive})
 			ts := httptest.NewServer(mux)
 			defer ts.Close()
 			checkHttpResponse(t, ts, tt.healthCheckURL, tt.expectStatusCode, nil, nil)
@@ -189,7 +198,7 @@ func TestHttpSubPath(t *testing.T) {
 				apiError:  tt.apiError,
 				authStore: auth.NewAuthStore(logger, schema.NewAuthBackend(logger, be), nil, 0),
 			}
-			HandleHealth(logger, mux, s)
+			HandleHealth(logger, mux, s, &fakeNotifier{isDefragActive: tt.isDefragActive})
 			ts := httptest.NewServer(mux)
 			defer ts.Close()
 			checkHttpResponse(t, ts, tt.healthCheckURL, tt.expectStatusCode, tt.inResult, tt.notInResult)
@@ -242,7 +251,7 @@ func TestDataCorruptionCheck(t *testing.T) {
 			s := &fakeHealthServer{
 				authStore: auth.NewAuthStore(logger, schema.NewAuthBackend(logger, be), nil, 0),
 			}
-			HandleHealth(logger, mux, s)
+			HandleHealth(logger, mux, s, &fakeNotifier{isDefragActive: tt.isDefragActive})
 			ts := httptest.NewServer(mux)
 			defer ts.Close()
 			// OK before alarms are activated.
@@ -278,6 +287,21 @@ func TestSerializableReadCheck(t *testing.T) {
 			expectStatusCode: http.StatusServiceUnavailable,
 			inResult:         []string{"[-]serializable_read failed: range error: Unexpected error"},
 		},
+		{
+			name:             "Alive if defrag is active and range api is not available",
+			healthCheckURL:   "/livez",
+			isDefragActive:   true,
+			apiError:         fmt.Errorf("timeout error"),
+			expectStatusCode: http.StatusOK,
+		},
+		{
+			name:             "Not ready if defrag is active and range api is not available",
+			healthCheckURL:   "/readyz",
+			isDefragActive:   true,
+			apiError:         fmt.Errorf("timeout error"),
+			expectStatusCode: http.StatusServiceUnavailable,
+			inResult:         []string{"[-]serializable_read failed: defrag is active"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -287,7 +311,7 @@ func TestSerializableReadCheck(t *testing.T) {
 				apiError:  tt.apiError,
 				authStore: auth.NewAuthStore(logger, schema.NewAuthBackend(logger, be), nil, 0),
 			}
-			HandleHealth(logger, mux, s)
+			HandleHealth(logger, mux, s, &fakeNotifier{isDefragActive: tt.isDefragActive})
 			ts := httptest.NewServer(mux)
 			defer ts.Close()
 			checkHttpResponse(t, ts, tt.healthCheckURL, tt.expectStatusCode, tt.inResult, tt.notInResult)

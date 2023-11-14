@@ -969,6 +969,7 @@ func (m *Member) Launch() error {
 	}
 	m.Server.SyncTicker = time.NewTicker(500 * time.Millisecond)
 	m.Server.Start()
+	healthNotifier := v3rpc.NewHealthNotifier(m.Server)
 
 	var peerTLScfg *tls.Config
 	if m.PeerTLSInfo != nil && !m.PeerTLSInfo.Empty() {
@@ -976,7 +977,6 @@ func (m *Member) Launch() error {
 			return err
 		}
 	}
-
 	if m.GrpcListener != nil {
 		var (
 			tlscfg *tls.Config
@@ -987,7 +987,7 @@ func (m *Member) Launch() error {
 				return err
 			}
 		}
-		m.GrpcServer = v3rpc.Server(m.Server, tlscfg, m.GrpcServerRecorder.UnaryInterceptor(), m.GrpcServerOpts...)
+		m.GrpcServer = v3rpc.Server(m.Server, healthNotifier, tlscfg, m.GrpcServerRecorder.UnaryInterceptor(), m.GrpcServerOpts...)
 		m.ServerClient = v3client.New(m.Server)
 		lockpb.RegisterLockServer(m.GrpcServer, v3lock.NewLockServer(m.ServerClient))
 		epb.RegisterElectionServer(m.GrpcServer, v3election.NewElectionServer(m.ServerClient))
@@ -1044,7 +1044,7 @@ func (m *Member) Launch() error {
 		etcdhttp.HandleDebug(handler)
 		etcdhttp.HandleVersion(handler, m.Server)
 		etcdhttp.HandleMetrics(handler)
-		etcdhttp.HandleHealth(m.Logger, handler, m.Server)
+		etcdhttp.HandleHealth(m.Logger, handler, m.Server, healthNotifier)
 		hs := &httptest.Server{
 			Listener: ln,
 			Config: &http.Server{

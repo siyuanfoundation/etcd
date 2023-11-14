@@ -46,9 +46,13 @@ type ServerHealth interface {
 	AuthStore() auth.AuthStore
 }
 
+type notifier interface {
+	IsDefragActive() bool
+}
+
 // HandleHealth registers metrics and health handlers. it checks health by using v3 range request
 // and its corresponding timeout.
-func HandleHealth(lg *zap.Logger, mux *http.ServeMux, srv ServerHealth) {
+func HandleHealth(lg *zap.Logger, mux *http.ServeMux, srv ServerHealth, healthNotifier notifier) {
 	mux.Handle(PathHealth, NewHealthHandler(lg, func(ctx context.Context, excludedAlarms StringSet, serializable bool) Health {
 		if h := checkAlarms(lg, srv, excludedAlarms); h.Health != "true" {
 			return h
@@ -59,8 +63,8 @@ func HandleHealth(lg *zap.Logger, mux *http.ServeMux, srv ServerHealth) {
 		return checkAPI(ctx, lg, srv, serializable)
 	}))
 
-	installLivezEndpoints(lg, mux, srv)
-	installReadyzEndpoints(lg, mux, srv)
+	installLivezEndpoints(lg, mux, srv, healthNotifier)
+	installReadyzEndpoints(lg, mux, srv, healthNotifier)
 }
 
 // NewHealthHandler handles '/health' requests.
@@ -205,16 +209,16 @@ type CheckRegistry struct {
 	checks map[string]HealthCheck
 }
 
-func installLivezEndpoints(lg *zap.Logger, mux *http.ServeMux, server ServerHealth) {
+func installLivezEndpoints(lg *zap.Logger, mux *http.ServeMux, server ServerHealth, healthNotifier notifier) {
 	reg := CheckRegistry{path: "/livez", checks: make(map[string]HealthCheck)}
-	reg.Register("serializable_read", serializableReadCheck(server))
+	reg.Register("serializable_read", serializableReadCheck(server, healthNotifier, true /* skipCheckDuringDefrag */))
 	reg.InstallHttpEndpoints(lg, mux)
 }
 
-func installReadyzEndpoints(lg *zap.Logger, mux *http.ServeMux, server ServerHealth) {
+func installReadyzEndpoints(lg *zap.Logger, mux *http.ServeMux, server ServerHealth, healthNotifier notifier) {
 	reg := CheckRegistry{path: "/readyz", checks: make(map[string]HealthCheck)}
 	reg.Register("data_corruption", activeAlarmCheck(server, pb.AlarmType_CORRUPT))
-	reg.Register("serializable_read", serializableReadCheck(server))
+	reg.Register("serializable_read", serializableReadCheck(server, healthNotifier, false /* skipCheckDuringDefrag */))
 	reg.InstallHttpEndpoints(lg, mux)
 }
 
@@ -355,8 +359,16 @@ func activeAlarmCheck(srv ServerHealth, at pb.AlarmType) func(context.Context) e
 	}
 }
 
-func serializableReadCheck(srv ServerHealth) func(ctx context.Context) error {
+func serializableReadCheck(srv ServerHealth, healthNotifier notifier, skipCheckDuringDefrag bool) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
+		// skips the check if defrag is active.
+		if skipCheckDuringDefrag && healthNotifier.IsDefragActive() {
+			return nil
+		}
+		// returns early if defrag is active.
+		if healthNotifier.IsDefragActive() {
+			return fmt.Errorf("defrag is active")
+		}
 		ctx = srv.AuthStore().WithRoot(ctx)
 		_, err := srv.Range(ctx, &pb.RangeRequest{KeysOnly: true, Limit: 1, Serializable: true})
 		if err != nil {

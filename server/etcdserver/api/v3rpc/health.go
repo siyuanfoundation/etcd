@@ -15,6 +15,8 @@
 package v3rpc
 
 import (
+	"sync"
+
 	"go.uber.org/zap"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -26,16 +28,15 @@ const (
 	allGRPCServices = ""
 )
 
-type notifier interface {
+type HealthNotifier interface {
 	defragStarted()
 	defragFinished()
+	addServer(hs *health.Server)
+	IsDefragActive() bool
 }
 
-func newHealthNotifier(hs *health.Server, s *etcdserver.EtcdServer) notifier {
-	if hs == nil {
-		panic("unexpected nil gRPC health server")
-	}
-	hc := &healthNotifier{hs: hs, lg: s.Logger(), stopGRPCServiceOnDefrag: s.Cfg.ExperimentalStopGRPCServiceOnDefrag}
+func NewHealthNotifier(s *etcdserver.EtcdServer) HealthNotifier {
+	hc := &healthNotifier{lg: s.Logger(), stopGRPCServiceOnDefrag: s.Cfg.ExperimentalStopGRPCServiceOnDefrag}
 	// set grpc health server as serving status blindly since
 	// the grpc server will serve iff s.ReadyNotify() is closed.
 	hc.startServe()
@@ -43,20 +44,39 @@ func newHealthNotifier(hs *health.Server, s *etcdserver.EtcdServer) notifier {
 }
 
 type healthNotifier struct {
-	hs *health.Server
-	lg *zap.Logger
-
+	hs                      []*health.Server
+	lg                      *zap.Logger
+	lock                    sync.RWMutex
+	isDefragActive          bool
 	stopGRPCServiceOnDefrag bool
 }
 
+func (hc *healthNotifier) IsDefragActive() bool {
+	return hc.isDefragActive
+}
+
+func (hc *healthNotifier) addServer(hs *health.Server) {
+	hc.lock.Lock()
+	defer hc.lock.Unlock()
+	hc.hs = append(hc.hs, hs)
+}
+
 func (hc *healthNotifier) defragStarted() {
+	hc.lock.Lock()
+	defer hc.lock.Unlock()
+	hc.isDefragActive = true
 	if !hc.stopGRPCServiceOnDefrag {
 		return
 	}
 	hc.stopServe("defrag is active")
 }
 
-func (hc *healthNotifier) defragFinished() { hc.startServe() }
+func (hc *healthNotifier) defragFinished() {
+	hc.lock.Lock()
+	defer hc.lock.Unlock()
+	hc.isDefragActive = false
+	hc.startServe()
+}
 
 func (hc *healthNotifier) startServe() {
 	hc.lg.Info(
@@ -64,7 +84,9 @@ func (hc *healthNotifier) startServe() {
 		zap.String("service", allGRPCServices),
 		zap.String("status", healthpb.HealthCheckResponse_SERVING.String()),
 	)
-	hc.hs.SetServingStatus(allGRPCServices, healthpb.HealthCheckResponse_SERVING)
+	for _, hs := range hc.hs {
+		hs.SetServingStatus(allGRPCServices, healthpb.HealthCheckResponse_SERVING)
+	}
 }
 
 func (hc *healthNotifier) stopServe(reason string) {
@@ -74,5 +96,7 @@ func (hc *healthNotifier) stopServe(reason string) {
 		zap.String("status", healthpb.HealthCheckResponse_NOT_SERVING.String()),
 		zap.String("reason", reason),
 	)
-	hc.hs.SetServingStatus(allGRPCServices, healthpb.HealthCheckResponse_NOT_SERVING)
+	for _, hs := range hc.hs {
+		hs.SetServingStatus(allGRPCServices, healthpb.HealthCheckResponse_NOT_SERVING)
+	}
 }

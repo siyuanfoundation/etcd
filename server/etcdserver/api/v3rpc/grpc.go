@@ -35,7 +35,7 @@ const (
 	maxSendBytes      = math.MaxInt32
 )
 
-func Server(s *etcdserver.EtcdServer, tls *tls.Config, interceptor grpc.UnaryServerInterceptor, gopts ...grpc.ServerOption) *grpc.Server {
+func Server(s *etcdserver.EtcdServer, healthNotifier HealthNotifier, tls *tls.Config, interceptor grpc.UnaryServerInterceptor, gopts ...grpc.ServerOption) *grpc.Server {
 	var opts []grpc.ServerOption
 	opts = append(opts, grpc.CustomCodec(&codec{}))
 	if tls != nil {
@@ -77,7 +77,10 @@ func Server(s *etcdserver.EtcdServer, tls *tls.Config, interceptor grpc.UnarySer
 	pb.RegisterAuthServer(grpcServer, NewAuthServer(s))
 
 	hsrv := health.NewServer()
-	healthNotifier := newHealthNotifier(hsrv, s)
+	if healthNotifier == nil {
+		healthNotifier = NewHealthNotifier(s)
+	}
+	healthNotifier.addServer(hsrv)
 	healthpb.RegisterHealthServer(grpcServer, hsrv)
 	pb.RegisterMaintenanceServer(grpcServer, NewMaintenanceServer(s, healthNotifier))
 

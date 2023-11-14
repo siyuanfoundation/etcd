@@ -48,6 +48,7 @@ import (
 	"go.etcd.io/etcd/server/v3/etcdserver"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/etcdhttp"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/rafthttp"
+	"go.etcd.io/etcd/server/v3/etcdserver/api/v3rpc"
 	"go.etcd.io/etcd/server/v3/storage"
 	"go.etcd.io/etcd/server/v3/verify"
 )
@@ -83,6 +84,8 @@ type Etcd struct {
 	errc  chan error
 
 	closeOnce sync.Once
+
+	healthNotifier v3rpc.HealthNotifier
 }
 
 type peerListener struct {
@@ -251,6 +254,7 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 		return e, err
 	}
 
+	e.healthNotifier = v3rpc.NewHealthNotifier(e.Server)
 	// buffer channel so goroutines on closed connections won't wait forever
 	e.errc = make(chan error, len(e.Peers)+len(e.Clients)+2*len(e.sctxs))
 
@@ -739,7 +743,7 @@ func (e *Etcd) serveClients() {
 	etcdhttp.HandleDebug(mux)
 	etcdhttp.HandleVersion(mux, e.Server)
 	etcdhttp.HandleMetrics(mux)
-	etcdhttp.HandleHealth(e.cfg.logger, mux, e.Server)
+	etcdhttp.HandleHealth(e.cfg.logger, mux, e.Server, e.healthNotifier)
 
 	var gopts []grpc.ServerOption
 	if e.cfg.GRPCKeepAliveMinTime > time.Duration(0) {
@@ -766,7 +770,7 @@ func (e *Etcd) serveClients() {
 	// start client servers in each goroutine
 	for _, sctx := range e.sctxs {
 		go func(s *serveCtx) {
-			e.errHandler(s.serve(e.Server, &e.cfg.ClientTLSInfo, mux, e.errHandler, e.grpcGatewayDial(splitHttp), splitHttp, gopts...))
+			e.errHandler(s.serve(e.Server, e.healthNotifier, &e.cfg.ClientTLSInfo, mux, e.errHandler, e.grpcGatewayDial(splitHttp), splitHttp, gopts...))
 		}(sctx)
 	}
 }
@@ -824,7 +828,7 @@ func (e *Etcd) serveMetrics() (err error) {
 	if len(e.cfg.ListenMetricsUrls) > 0 {
 		metricsMux := http.NewServeMux()
 		etcdhttp.HandleMetrics(metricsMux)
-		etcdhttp.HandleHealth(e.cfg.logger, metricsMux, e.Server)
+		etcdhttp.HandleHealth(e.cfg.logger, metricsMux, e.Server, e.healthNotifier)
 
 		for _, murl := range e.cfg.ListenMetricsUrls {
 			tlsInfo := &e.cfg.ClientTLSInfo
