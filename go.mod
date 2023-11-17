@@ -18,6 +18,7 @@ require (
 	github.com/bgentry/speakeasy v0.1.0
 	github.com/cheggaaa/pb/v3 v3.1.4
 	github.com/coreos/go-semver v0.3.1
+	github.com/dave/jennifer v1.7.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.8.4

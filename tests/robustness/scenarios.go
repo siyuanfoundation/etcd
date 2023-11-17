@@ -140,6 +140,7 @@ func scenarios(t *testing.T) []testScenario {
 		profile:   traffic.HighTrafficProfile,
 		traffic:   traffic.EtcdPut,
 		cluster: *e2e.NewConfig(
+			options.WithSubsetOptions(randomizableOptions...),
 			e2e.WithSnapshotCount(100),
 		),
 	})
