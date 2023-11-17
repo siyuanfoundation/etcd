@@ -19,13 +19,14 @@ import (
 	"sort"
 
 	"go.etcd.io/etcd/client/pkg/v3/verify"
+	"go.etcd.io/etcd/server/v3/bucket"
 )
 
 const bucketBufferInitialSize = 512
 
 // txBuffer handles functionality shared between txWriteBuffer and txReadBuffer.
 type txBuffer struct {
-	buckets map[BucketID]*bucketBuffer
+	buckets map[bucket.BucketID]*bucketBuffer
 }
 
 func (txb *txBuffer) reset() {
@@ -43,20 +44,20 @@ type txWriteBuffer struct {
 	txBuffer
 	// Map from bucket ID into information whether this bucket is edited
 	// sequentially (i.e. keys are growing monotonically).
-	bucket2seq map[BucketID]bool
+	bucket2seq map[bucket.BucketID]bool
 }
 
-func (txw *txWriteBuffer) put(bucket Bucket, k, v []byte) {
+func (txw *txWriteBuffer) put(bucket bucket.Bucket, k, v []byte) {
 	txw.bucket2seq[bucket.ID()] = false
 	txw.putInternal(bucket, k, v)
 }
 
-func (txw *txWriteBuffer) putSeq(bucket Bucket, k, v []byte) {
+func (txw *txWriteBuffer) putSeq(bucket bucket.Bucket, k, v []byte) {
 	// TODO: Add (in tests?) verification whether k>b[len(b)]
 	txw.putInternal(bucket, k, v)
 }
 
-func (txw *txWriteBuffer) putInternal(bucket Bucket, k, v []byte) {
+func (txw *txWriteBuffer) putInternal(bucket bucket.Bucket, k, v []byte) {
 	b, ok := txw.buckets[bucket.ID()]
 	if !ok {
 		b = newBucketBuffer()
@@ -103,14 +104,14 @@ type txReadBuffer struct {
 	bufVersion uint64
 }
 
-func (txr *txReadBuffer) Range(bucket Bucket, key, endKey []byte, limit int64) ([][]byte, [][]byte) {
+func (txr *txReadBuffer) Range(bucket bucket.Bucket, key, endKey []byte, limit int64) ([][]byte, [][]byte) {
 	if b := txr.buckets[bucket.ID()]; b != nil {
 		return b.Range(key, endKey, limit)
 	}
 	return nil, nil
 }
 
-func (txr *txReadBuffer) ForEach(bucket Bucket, visitor func(k, v []byte) error) error {
+func (txr *txReadBuffer) ForEach(bucket bucket.Bucket, visitor func(k, v []byte) error) error {
 	if b := txr.buckets[bucket.ID()]; b != nil {
 		return b.ForEach(visitor)
 	}
@@ -121,7 +122,7 @@ func (txr *txReadBuffer) ForEach(bucket Bucket, visitor func(k, v []byte) error)
 func (txr *txReadBuffer) unsafeCopy() txReadBuffer {
 	txrCopy := txReadBuffer{
 		txBuffer: txBuffer{
-			buckets: make(map[BucketID]*bucketBuffer, len(txr.txBuffer.buckets)),
+			buckets: make(map[bucket.BucketID]*bucketBuffer, len(txr.txBuffer.buckets)),
 		},
 		bufVersion: 0,
 	}

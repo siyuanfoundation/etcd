@@ -25,7 +25,6 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.uber.org/zap"
 
-	bolt "go.etcd.io/bbolt"
 	"go.etcd.io/etcd/client/pkg/v3/transport"
 	"go.etcd.io/etcd/client/pkg/v3/types"
 	"go.etcd.io/etcd/pkg/v3/netutil"
@@ -40,6 +39,8 @@ type ServerConfig struct {
 	DiscoveryURL   string
 	DiscoveryProxy string
 	DiscoveryCfg   v3discovery.DiscoveryConfig
+
+	BackendType string
 
 	ClientURLs types.URLs
 	PeerURLs   types.URLs
@@ -66,7 +67,7 @@ type ServerConfig struct {
 	BackendBatchLimit int
 
 	// BackendFreelistType is the type of the backend boltdb freelist.
-	BackendFreelistType bolt.FreelistType
+	BackendFreelistType string
 
 	InitialPeerURLsMap  types.URLsMap
 	InitialClusterToken string

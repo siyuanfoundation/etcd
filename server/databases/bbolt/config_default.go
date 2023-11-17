@@ -14,6 +14,8 @@
 
 //go:build !linux && !windows
 
-package backend
+package bbolt
 
-func (bcfg *BackendConfig) mmapSize() int { return int(bcfg.MmapSize) }
+import bolt "go.etcd.io/bbolt"
+
+var boltOpenOptions *bolt.Options

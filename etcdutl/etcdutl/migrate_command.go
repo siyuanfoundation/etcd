@@ -56,6 +56,7 @@ type migrateOptions struct {
 	dataDir       string
 	targetVersion string
 	force         bool
+	backendType   string
 }
 
 func newMigrateOptions() *migrateOptions {
@@ -71,6 +72,7 @@ func (o *migrateOptions) AddFlags(cmd *cobra.Command) {
 	cmd.MarkFlagRequired("target-version")
 
 	cmd.Flags().BoolVar(&o.force, "force", o.force, "Ignore migration failure and forcefully override storage version. Not recommended.")
+	cmd.Flags().StringVar(&o.backendType, "backend-type", "bolt", "Type of backend used by etcd.")
 }
 
 func (o *migrateOptions) Config() (*migrateConfig, error) {
@@ -92,7 +94,7 @@ func (o *migrateOptions) Config() (*migrateConfig, error) {
 	}
 
 	dbPath := datadir.ToBackendFileName(o.dataDir)
-	c.be = backend.NewDefaultBackend(GetLogger(), dbPath)
+	c.be = backend.NewDefaultBackend(GetLogger(), dbPath, o.backendType)
 
 	walPath := datadir.ToWalDir(o.dataDir)
 	w, err := wal.OpenForRead(c.lg, walPath, walpb.Snapshot{})

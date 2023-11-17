@@ -34,6 +34,7 @@ import (
 	"go.etcd.io/etcd/client/pkg/v3/types"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/snapshot"
+	"go.etcd.io/etcd/server/v3/bucket"
 	"go.etcd.io/etcd/server/v3/config"
 	"go.etcd.io/etcd/server/v3/etcdserver"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/membership"
@@ -48,6 +49,8 @@ import (
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/raftpb"
 )
+
+const defaultBackendType = "bolt"
 
 // Manager defines snapshot methods.
 type Manager interface {
@@ -317,7 +320,7 @@ func (s *v3Manager) saveDB() error {
 		return err
 	}
 
-	be := backend.NewDefaultBackend(s.lg, s.outDbPath())
+	be := backend.NewDefaultBackend(s.lg, s.outDbPath(), defaultBackendType)
 	defer be.Close()
 
 	err = schema.NewMembershipBackend(s.lg, be).TrimMembershipFromBackend()
@@ -331,7 +334,7 @@ func (s *v3Manager) saveDB() error {
 // modifyLatestRevision can increase the latest revision by the given amount and sets the scheduled compaction
 // to that revision so that the server will consider this revision compacted.
 func (s *v3Manager) modifyLatestRevision(bumpAmount uint64) error {
-	be := backend.NewDefaultBackend(s.lg, s.outDbPath())
+	be := backend.NewDefaultBackend(s.lg, s.outDbPath(), defaultBackendType)
 	defer func() {
 		be.ForceCommit()
 		be.Close()
@@ -364,7 +367,7 @@ func (s *v3Manager) unsafeBumpBucketsRevision(tx backend.UnsafeWriter, latest mv
 	latest.Sub = 0
 	k := mvcc.NewRevBytes()
 	k = mvcc.RevToBytes(latest, k)
-	tx.UnsafePut(schema.Key, k, []byte{})
+	tx.UnsafePut(bucket.Key, k, []byte{})
 
 	return latest
 }
@@ -380,7 +383,7 @@ func (s *v3Manager) unsafeMarkRevisionCompacted(tx backend.UnsafeWriter, latest 
 
 func (s *v3Manager) unsafeGetLatestRevision(tx backend.UnsafeReader) (mvcc.Revision, error) {
 	var latest mvcc.Revision
-	err := tx.UnsafeForEach(schema.Key, func(k, _ []byte) (err error) {
+	err := tx.UnsafeForEach(bucket.Key, func(k, _ []byte) (err error) {
 		rev := mvcc.BytesToRev(k)
 
 		if rev.GreaterThan(latest) {
@@ -472,7 +475,7 @@ func (s *v3Manager) saveWALAndSnap() (*raftpb.HardState, error) {
 	}
 
 	// add members again to persist them to the backend we create.
-	be := backend.NewDefaultBackend(s.lg, s.outDbPath())
+	be := backend.NewDefaultBackend(s.lg, s.outDbPath(), defaultBackendType)
 	defer be.Close()
 	s.cl.SetBackend(schema.NewMembershipBackend(s.lg, be))
 	for _, m := range s.cl.Members() {
@@ -551,7 +554,7 @@ func (s *v3Manager) saveWALAndSnap() (*raftpb.HardState, error) {
 }
 
 func (s *v3Manager) updateCIndex(commit uint64, term uint64) error {
-	be := backend.NewDefaultBackend(s.lg, s.outDbPath())
+	be := backend.NewDefaultBackend(s.lg, s.outDbPath(), defaultBackendType)
 	defer be.Close()
 
 	cindex.UpdateConsistentIndexForce(be.BatchTx(), commit, term)

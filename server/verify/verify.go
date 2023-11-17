@@ -29,7 +29,11 @@ import (
 	"go.etcd.io/raft/v3/raftpb"
 )
 
-const ENV_VERIFY_VALUE_STORAGE_WAL verify.VerificationType = "storage_wal"
+const (
+	ENV_VERIFY_VALUE_STORAGE_WAL verify.VerificationType = "storage_wal"
+
+	defaultBackendType = "bolt"
+)
 
 type Config struct {
 	// DataDir is a root directory where the data being verified are stored.
@@ -75,7 +79,7 @@ func Verify(cfg Config) error {
 		}
 	}()
 
-	be := backend.NewDefaultBackend(lg, datadir.ToBackendFileName(cfg.DataDir))
+	be := backend.NewDefaultBackend(lg, datadir.ToBackendFileName(cfg.DataDir), defaultBackendType)
 	defer be.Close()
 
 	snapshot, hardstate, err := validateWal(cfg)

@@ -184,7 +184,7 @@ func TestBootstrapBackend(t *testing.T) {
 			cfg := config.ServerConfig{
 				Name:                "demoNode",
 				DataDir:             dataDir,
-				BackendFreelistType: bolt.FreelistArrayType,
+				BackendFreelistType: string(bolt.FreelistArrayType),
 				Logger:              zaptest.NewLogger(t),
 			}
 

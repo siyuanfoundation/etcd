@@ -35,7 +35,6 @@ import (
 	"google.golang.org/grpc"
 	"sigs.k8s.io/yaml"
 
-	bolt "go.etcd.io/bbolt"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	"go.etcd.io/etcd/client/pkg/v3/srv"
 	"go.etcd.io/etcd/client/pkg/v3/tlsutil"
@@ -106,8 +105,8 @@ const (
 	// maxElectionMs specifies the maximum value of election timeout.
 	// More details are listed on etcd.io/docs > version > tuning/#time-parameters
 	maxElectionMs = 50000
-	// backend freelist map type
-	freelistArrayType = "array"
+	// DefaultBackendType defaults the backend to bolt
+	DefaultBackendType = "bolt"
 )
 
 var (
@@ -124,6 +123,8 @@ var (
 
 	// indirection for testing
 	getCluster = srv.GetCluster
+
+	SupportedBackendTypes = map[string]struct{}{"bolt": {}, "sqlite": {}}
 )
 
 var (
@@ -382,6 +383,9 @@ type Config struct {
 	// Defaults to 0.
 	ExperimentalDistributedTracingSamplingRatePerMillion int `json:"experimental-distributed-tracing-sampling-rate"`
 
+	// ExperimentalBackendType allows you to set the underlying database to sqlite.
+	ExperimentalBackendType string `json:"experimental-backend-type"`
+
 	// Logger is logger options: currently only supports "zap".
 	// "capnslog" is removed in v3.5.
 	Logger string `json:"logger"`
@@ -455,6 +459,8 @@ type configJSON struct {
 
 	ClientSecurityJSON securityConfig `json:"client-transport-security"`
 	PeerSecurityJSON   securityConfig `json:"peer-transport-security"`
+
+	BackendType string `json:"backend-type"`
 }
 
 type securityConfig struct {
@@ -465,6 +471,12 @@ type securityConfig struct {
 	CertAuth       bool   `json:"client-cert-auth"`
 	TrustedCAFile  string `json:"trusted-ca-file"`
 	AutoTLS        bool   `json:"auto-tls"`
+}
+
+func NewSqliteConfig() *Config {
+	c := NewConfig()
+	c.ExperimentalBackendType = "sqlite"
+	return c
 }
 
 // NewConfig creates a new Config populated with default values.
@@ -486,6 +498,7 @@ func NewConfig() *Config {
 		MaxRequestBytes:                  DefaultMaxRequestBytes,
 		MaxConcurrentStreams:             DefaultMaxConcurrentStreams,
 		ExperimentalWarningApplyDuration: DefaultWarningApplyDuration,
+		ExperimentalBackendType:          DefaultBackendType,
 
 		GRPCKeepAliveMinTime:  DefaultGRPCKeepAliveMinTime,
 		GRPCKeepAliveInterval: DefaultGRPCKeepAliveInterval,
@@ -812,6 +825,10 @@ func (cfg *configYAML) configFromFile(path string) error {
 			os.Exit(1)
 		}
 		cfg.ListenMetricsUrls = u
+	}
+
+	if cfg.configJSON.BackendType != "" {
+		cfg.Config.ExperimentalBackendType = cfg.configJSON.BackendType
 	}
 
 	if cfg.CORSJSON != "" {
@@ -1308,12 +1325,4 @@ func (cfg *Config) getMetricsURLs() (ss []string) {
 		ss[i] = cfg.ListenMetricsUrls[i].String()
 	}
 	return ss
-}
-
-func parseBackendFreelistType(freelistType string) bolt.FreelistType {
-	if freelistType == freelistArrayType {
-		return bolt.FreelistArrayType
-	}
-
-	return bolt.FreelistMapType
 }

@@ -1,4 +1,4 @@
-// Copyright 2016 The etcd Authors
+// Copyright 2017 The etcd Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,8 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !linux && !windows
+//go:build windows
 
-package backend
+package bbolt
 
-func (bcfg *BackendConfig) mmapSize() int { return int(bcfg.MmapSize) }
+import bolt "go.etcd.io/bbolt"
+
+var boltOpenOptions *bolt.Options = nil
+
+// setting mmap size != 0 on windows will allocate the entire
+// mmap size for the file, instead of growing it. So, force 0.

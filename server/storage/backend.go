@@ -45,6 +45,7 @@ func newBackend(cfg config.ServerConfig, hooks backend.Hooks) backend.Backend {
 		}
 	}
 	bcfg.BackendFreelistType = cfg.BackendFreelistType
+	bcfg.BackendType = cfg.BackendType
 	bcfg.Logger = cfg.Logger
 	if cfg.QuotaBackendBytes > 0 && cfg.QuotaBackendBytes != DefaultQuotaBytes {
 		// permit 10% excess over quota for disarm

@@ -33,6 +33,7 @@ import (
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	"go.etcd.io/etcd/api/v3/version"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/embed"
 	"go.etcd.io/etcd/server/v3/lease"
 	"go.etcd.io/etcd/server/v3/storage/backend"
 	"go.etcd.io/etcd/server/v3/storage/mvcc"
@@ -270,7 +271,7 @@ func testMaintenanceSnapshotErrorInflight(t *testing.T, snapshot func(context.Co
 	// take about 1-second to read snapshot
 	clus.Members[0].Stop(t)
 	dpath := filepath.Join(clus.Members[0].DataDir, "member", "snap", "db")
-	b := backend.NewDefaultBackend(lg, dpath)
+	b := backend.NewDefaultBackend(lg, dpath, embed.DefaultBackendType)
 	s := mvcc.NewStore(lg, b, &lease.FakeLessor{}, mvcc.StoreConfig{CompactionBatchLimit: math.MaxInt32})
 	rev := 100000
 	for i := 2; i <= rev; i++ {

@@ -14,9 +14,11 @@
 
 package backend
 
-import bolt "go.etcd.io/bbolt"
+import (
+	"go.etcd.io/etcd/server/v3/interfaces"
+)
 
-func DbFromBackendForTest(b Backend) *bolt.DB {
+func DbFromBackendForTest(b Backend) interfaces.DB {
 	return b.(*backend).db
 }
 
