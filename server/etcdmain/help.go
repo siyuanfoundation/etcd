@@ -307,6 +307,8 @@ Experimental feature:
     Number of entries for a slow follower to catch up after compacting the raft storage entries.
   --experimental-stop-grpc-service-on-defrag
     Enable etcd gRPC service to stop serving client requests on defragmentation.
+  --experimental-backend-type
+    Sets the backend type: bolt or sqlite.
 
 Unsafe feature:
   --force-new-cluster 'false'
