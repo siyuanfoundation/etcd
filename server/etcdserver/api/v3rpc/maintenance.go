@@ -144,11 +144,13 @@ func (ms *maintenanceServer) Snapshot(sr *pb.SnapshotRequest, srv pb.Maintenance
 		buf := make([]byte, snapshotSendBufferSize)
 
 		n, err := io.ReadFull(pr, buf)
+		if n == 0 {
+			break
+		}
 		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 			return togRPCError(err)
 		}
 		sent += int64(n)
-
 		// if total is x * snapshotSendBufferSize. it is possible that
 		// resp.RemainingBytes == 0
 		// resp.Blob == zero byte but not nil

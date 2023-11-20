@@ -972,6 +972,13 @@ func (s *EtcdServer) applySnapshot(ep *etcdProgress, toApply *toApply) {
 	// wait for raftNode to persist snapshot onto the disk
 	<-toApply.notifyc
 
+	oldbe := s.be
+	lg.Info("closing old backend file")
+	if err := oldbe.Close(); err != nil {
+		lg.Panic("failed to close old backend", zap.Error(err))
+	}
+	lg.Info("closed old backend file")
+
 	newbe, err := serverstorage.OpenSnapshotBackend(s.Cfg, s.snapshotter, toApply.snapshot, s.beHooks)
 	if err != nil {
 		lg.Panic("failed to open snapshot backend", zap.Error(err))
@@ -1009,16 +1016,16 @@ func (s *EtcdServer) applySnapshot(ep *etcdProgress, toApply *toApply) {
 	// on the backend are finished.
 	// We do not want to wait on closing the old backend.
 	s.bemu.Lock()
-	oldbe := s.be
-	go func() {
-		lg.Info("closing old backend file")
-		defer func() {
-			lg.Info("closed old backend file")
-		}()
-		if err := oldbe.Close(); err != nil {
-			lg.Panic("failed to close old backend", zap.Error(err))
-		}
-	}()
+	// oldbe := s.be
+	// go func() {
+	// 	lg.Info("closing old backend file")
+	// 	defer func() {
+	// 		lg.Info("closed old backend file")
+	// 	}()
+	// 	if err := oldbe.Close(); err != nil {
+	// 		lg.Panic("failed to close old backend", zap.Error(err))
+	// 	}
+	// }()
 
 	s.be = newbe
 	s.bemu.Unlock()
