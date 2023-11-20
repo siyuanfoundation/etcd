@@ -107,6 +107,8 @@ const (
 	maxElectionMs = 50000
 	// DefaultBackendType defaults the backend to bolt
 	DefaultBackendType = "bolt"
+	// SqliteBackendType sets the backend to sqlite
+	SqliteBackendType = "sqlite"
 )
 
 var (
@@ -474,13 +476,15 @@ type securityConfig struct {
 }
 
 func NewSqliteConfig() *Config {
-	c := NewConfig()
-	c.ExperimentalBackendType = "sqlite"
-	return c
+	return NewGenericConfig(SqliteBackendType)
 }
 
 // NewConfig creates a new Config populated with default values.
 func NewConfig() *Config {
+	return NewGenericConfig(DefaultBackendType)
+}
+
+func NewGenericConfig(backendType string) *Config {
 	lpurl, _ := url.Parse(DefaultListenPeerURLs)
 	apurl, _ := url.Parse(DefaultInitialAdvertisePeerURLs)
 	lcurl, _ := url.Parse(DefaultListenClientURLs)
@@ -498,7 +502,7 @@ func NewConfig() *Config {
 		MaxRequestBytes:                  DefaultMaxRequestBytes,
 		MaxConcurrentStreams:             DefaultMaxConcurrentStreams,
 		ExperimentalWarningApplyDuration: DefaultWarningApplyDuration,
-		ExperimentalBackendType:          DefaultBackendType,
+		ExperimentalBackendType:          backendType,
 
 		GRPCKeepAliveMinTime:  DefaultGRPCKeepAliveMinTime,
 		GRPCKeepAliveInterval: DefaultGRPCKeepAliveInterval,
@@ -746,6 +750,7 @@ func (cfg *Config) AddFlags(fs *flag.FlagSet) {
 	fs.UintVar(&cfg.ExperimentalBootstrapDefragThresholdMegabytes, "experimental-bootstrap-defrag-threshold-megabytes", 0, "Enable the defrag during etcd server bootstrap on condition that it will free at least the provided threshold of disk space. Needs to be set to non-zero value to take effect.")
 	fs.IntVar(&cfg.ExperimentalMaxLearners, "experimental-max-learners", membership.DefaultMaxLearners, "Sets the maximum number of learners that can be available in the cluster membership.")
 	fs.Uint64Var(&cfg.SnapshotCatchUpEntries, "experimental-snapshot-catchup-entries", cfg.SnapshotCatchUpEntries, "Number of entries for a slow follower to catch up after compacting the raft storage entries.")
+	fs.StringVar(&cfg.ExperimentalBackendType, "experimental-backend-type", DefaultBackendType, "Sets the backend type: bolt or sqlite.")
 
 	// unsafe
 	fs.BoolVar(&cfg.UnsafeNoFsync, "unsafe-no-fsync", false, "Disables fsync, unsafe, will cause data loss.")
@@ -989,6 +994,10 @@ func (cfg *Config) Validate() error {
 		if err := validateTracingConfig(cfg.ExperimentalDistributedTracingSamplingRatePerMillion); err != nil {
 			return fmt.Errorf("distributed tracing configurition is not valid: (%v)", err)
 		}
+	}
+
+	if cfg.ExperimentalBackendType == "sqlite" {
+		cfg.logger.Warn("Detected sqlite as a backend.")
 	}
 
 	if !cfg.ExperimentalEnableLeaseCheckpointPersist && cfg.ExperimentalEnableLeaseCheckpoint {

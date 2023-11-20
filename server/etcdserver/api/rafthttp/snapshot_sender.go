@@ -17,6 +17,7 @@ package rafthttp
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -97,6 +98,8 @@ func (s *snapshotSender) send(merged snap.Message) {
 	err := s.post(req)
 	defer merged.CloseWithError(err)
 	if err != nil {
+		fmt.Printf("logDebug: failed to send database snapshot, snapshot-index = %d, bytes = %v, size = %s, err = %s\n",
+			m.Snapshot.Metadata.Index, snapshotSizeVal, snapshotSize, err.Error())
 		if s.tr.Logger != nil {
 			s.tr.Logger.Warn(
 				"failed to send database snapshot",
@@ -127,7 +130,8 @@ func (s *snapshotSender) send(merged snap.Message) {
 	}
 	s.status.activate()
 	s.r.ReportSnapshot(m.To, raft.SnapshotFinish)
-
+	fmt.Printf("logDebug: sent database snapshot, snapshot-index = %d, bytes = %v, size = %s\n",
+		m.Snapshot.Metadata.Index, snapshotSizeVal, snapshotSize)
 	if s.tr.Logger != nil {
 		s.tr.Logger.Info(
 			"sent database snapshot",
