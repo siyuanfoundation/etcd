@@ -309,6 +309,8 @@ Experimental feature:
     Enable etcd gRPC service to stop serving client requests on defragmentation.
   --experimental-backend-type
     Sets the backend type: bolt or sqlite.
+    --experimental-enable-pprof
+    Enables pprof in http endpoint.
 
 Unsafe feature:
   --force-new-cluster 'false'

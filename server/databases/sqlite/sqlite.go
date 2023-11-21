@@ -28,7 +28,7 @@ import (
 	"os"
 	"strings"
 
-	_ "github.com/glebarez/go-sqlite"
+	_ "github.com/glebarez/go-sqlite" // keep
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 

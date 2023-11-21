@@ -440,6 +440,8 @@ type Config struct {
 
 	// V2Deprecation describes phase of API & Storage V2 support
 	V2Deprecation config.V2DeprecationEnum `json:"v2-deprecation"`
+
+	ExperimentalEnablePprof bool `json:"experimental-enable-pprof"`
 }
 
 // configYAML holds the config suitable for yaml parsing
@@ -751,6 +753,7 @@ func (cfg *Config) AddFlags(fs *flag.FlagSet) {
 	fs.IntVar(&cfg.ExperimentalMaxLearners, "experimental-max-learners", membership.DefaultMaxLearners, "Sets the maximum number of learners that can be available in the cluster membership.")
 	fs.Uint64Var(&cfg.SnapshotCatchUpEntries, "experimental-snapshot-catchup-entries", cfg.SnapshotCatchUpEntries, "Number of entries for a slow follower to catch up after compacting the raft storage entries.")
 	fs.StringVar(&cfg.ExperimentalBackendType, "experimental-backend-type", DefaultBackendType, "Sets the backend type: bolt or sqlite.")
+	fs.BoolVar(&cfg.ExperimentalEnablePprof, "experimental-enable-pprof", false, "Enable pprof.")
 
 	// unsafe
 	fs.BoolVar(&cfg.UnsafeNoFsync, "unsafe-no-fsync", false, "Disables fsync, unsafe, will cause data loss.")

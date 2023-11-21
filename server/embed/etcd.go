@@ -23,6 +23,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	_ "net/http/pprof" // keep
 	"net/url"
 	"runtime"
 	"sort"
@@ -266,6 +267,15 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 			return e, err
 		}
 	}
+	if e.cfg.ExperimentalEnablePprof {
+		go func() {
+			// memory profile can be visualized with go tool pprof -http=":8000" pprofbin http://localhost:6060/debug/pprof/heap
+			// CPU profile can be visualized with go tool pprof -http=":8000" pprofbin http://localhost:6060/debug/pprof/profile?seconds=30
+			err := http.ListenAndServe("localhost:6060", nil)
+			e.cfg.logger.Info("Starting pprof endpoint at localhost:6060", zap.Error(err))
+		}()
+	}
+
 	e.Server.Start()
 
 	e.servePeers()
