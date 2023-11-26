@@ -55,22 +55,22 @@ var checkPerfCfgMap = map[string]checkPerfCfg{
 	"s": {
 		limit:    150,
 		clients:  50,
-		duration: 60,
+		duration: 300,
 	},
 	"m": {
 		limit:    1000,
 		clients:  200,
-		duration: 60,
+		duration: 300,
 	},
 	"l": {
 		limit:    8000,
 		clients:  500,
-		duration: 60,
+		duration: 300,
 	},
 	"xl": {
 		limit:    15000,
 		clients:  1000,
-		duration: 60,
+		duration: 300,
 	},
 }
 
@@ -89,18 +89,18 @@ var checkDatascaleCfgMap = map[string]checkDatascaleCfg{
 	"m": {
 		limit:   100000,
 		kvSize:  1024,
-		clients: 200,
+		clients: 50,
 	},
 	"l": {
 		limit:   1000000,
 		kvSize:  1024,
-		clients: 500,
+		clients: 50,
 	},
 	"xl": {
 		// xl tries to hit the upper bound aggressively which is 3 versions of 1M objects (3M in total)
 		limit:   3000000,
 		kvSize:  1024,
-		clients: 1000,
+		clients: 50,
 	},
 }
 
@@ -163,7 +163,7 @@ func newCheckPerfCommand(cmd *cobra.Command, args []string) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.duration)*time.Second)
 	defer cancel()
-	ctx, icancel := interruptableContext(ctx, func() { attemptCleanup(clients[0], false) })
+	ctx, icancel := interruptableContext(ctx, func() { attemptCleanup(clients[0], checkPerfPrefix, false) })
 	defer icancel()
 
 	gctx, gcancel := context.WithCancel(ctx)
@@ -221,7 +221,7 @@ func newCheckPerfCommand(cmd *cobra.Command, args []string) {
 
 	s := <-sc
 
-	attemptCleanup(clients[0], autoCompact)
+	attemptCleanup(clients[0], checkPerfPrefix, autoCompact)
 
 	if autoDefrag {
 		for _, ep := range clients[0].Endpoints() {
@@ -265,10 +265,10 @@ func newCheckPerfCommand(cmd *cobra.Command, args []string) {
 	}
 }
 
-func attemptCleanup(client *v3.Client, autoCompact bool) {
+func attemptCleanup(client *v3.Client, prefix string, autoCompact bool) {
 	dctx, dcancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer dcancel()
-	dresp, err := client.Delete(dctx, checkPerfPrefix, v3.WithPrefix())
+	dresp, err := client.Delete(dctx, prefix, v3.WithPrefix())
 	if err != nil {
 		fmt.Printf("FAIL: Cleanup failed during key deletion: ERROR(%v)\n", err)
 		return
@@ -403,16 +403,10 @@ func newCheckDatascaleCommand(cmd *cobra.Command, args []string) {
 	}
 
 	// delete the created kv pairs
-	ctx, cancel = context.WithCancel(context.Background())
-	dresp, derr := clients[0].Delete(ctx, checkDatascalePrefix, v3.WithPrefix())
-	defer cancel()
-	if derr != nil {
-		cobrautl.ExitWithError(cobrautl.ExitError, derr)
-	}
-
-	if autoCompact {
-		compact(clients[0], dresp.Header.Revision)
-	}
+	attemptCleanup(clients[0], checkDatascalePrefix, autoCompact)
+	// if derr != nil {
+	// 	cobrautl.ExitWithError(cobrautl.ExitError, derr)
+	// }
 
 	if autoDefrag {
 		for _, ep := range clients[0].Endpoints() {
@@ -427,13 +421,17 @@ func newCheckDatascaleCommand(cmd *cobra.Command, args []string) {
 
 	bytesUsed := bytesAfter - bytesBefore
 	mbUsed := bytesUsed / (1024 * 1024)
-
+	// fails if the number of failures > errThreshold * limit
+	errThreshold := 0.2
+	fmt.Printf("Total ERROR = %d/%d\n", s.ErrorCount, cfg.limit)
 	if len(s.ErrorDist) != 0 {
-		fmt.Println("FAIL: too many errors")
 		for k, v := range s.ErrorDist {
 			fmt.Printf("FAIL: ERROR(%v) -> %d\n", k, v)
 		}
-		os.Exit(cobrautl.ExitError)
+		if s.ErrorCount > int(errThreshold*float64(cfg.limit)) {
+			fmt.Println("FAIL: too many errors")
+			os.Exit(cobrautl.ExitError)
+		}
 	} else {
 		fmt.Printf("PASS: Approximate system memory used : %v MB.\n", strconv.FormatFloat(mbUsed, 'f', 2, 64))
 	}

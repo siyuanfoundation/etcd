@@ -56,6 +56,7 @@ type Stats struct {
 	RPS        float64
 	Total      time.Duration
 	ErrorDist  map[string]int
+	ErrorCount int
 	Lats       []float64
 	TimeSeries TimeSeries
 }
@@ -172,6 +173,7 @@ func (r *reportRate) String() string {
 func (r *report) processResult(res *Result) {
 	if res.Err != nil {
 		r.stats.ErrorDist[res.Err.Error()]++
+		r.stats.ErrorCount++
 		return
 	}
 	dur := res.Duration()

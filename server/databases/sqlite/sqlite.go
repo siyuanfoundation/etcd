@@ -110,6 +110,10 @@ func NewSqliteDB[B BackendBucket](dir string, buckets ...B) (*SqliteDB, error) {
 	if err = db.Ping(); err != nil {
 		return nil, err
 	}
+	db.Exec("PRAGMA mmap_size=0;")
+	db.Exec("PRAGMA temp_store = file;")
+	db.Exec("PRAGMA page_size = 1024;")
+	db.Exec("PRAGMA cache_size = 100")
 	for _, b := range buckets {
 		tn := resolveTableName(string(b.Name()))
 		createTableQuery := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (key STRING PRIMARY KEY, value BLOB );", tn)
