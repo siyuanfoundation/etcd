@@ -39,11 +39,12 @@ import (
 )
 
 const (
-	hasBucketQuery               = `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`
-	queryTableNames              = `SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name;`
-	dropBucketQuery              = `DROP TABLE IF EXISTS ?;`
-	createBucketQuery            = "CREATE TABLE IF NOT EXISTS %s (key STRING PRIMARY KEY, value BLOB);"
-	genericUnsafeRangeQuery      = "select key, value from %s WHERE key >= ? AND key <= ? ORDER BY key limit ?;"
+	hasBucketQuery          = `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`
+	queryTableNames         = `SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name;`
+	dropBucketQuery         = `DROP TABLE IF EXISTS ?;`
+	createBucketQuery       = "CREATE TABLE IF NOT EXISTS %s (key STRING PRIMARY KEY, value BLOB);"
+	genericUnsafeRangeQuery = "select key, value from %s WHERE key >= ? AND key <= ? ORDER BY key limit ?;"
+	// genericUnsafeRangeQuery      = "select key, value from %s WHERE key >= ? AND key <= ? limit ?;"
 	genericUnsafeRangeQueryNoEnd = "select key, value from %s WHERE key >= ? ORDER BY key limit ?;"
 	genericGet                   = "SELECT value from %s WHERE key=?;"
 	genericUpsert                = "INSERT INTO %s (key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value;"
@@ -118,6 +119,11 @@ func NewSqliteDB[B BackendBucket](dir string, buckets ...B) (*SqliteDB, error) {
 	if err = db.Ping(); err != nil {
 		return nil, err
 	}
+	db.Exec("PRAGMA mmap_size=0;")
+	db.Exec("PRAGMA temp_store = file;")
+	db.Exec("PRAGMA page_size = 1024;")
+	db.Exec("PRAGMA cache_size = 100")
+	db.Exec("PRAGMA hard_heap_limit = 67108864") // 64M
 	for _, b := range buckets {
 		tn := resolveTableName(string(b.Name()))
 		createTableQuery := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (key STRING PRIMARY KEY, value BLOB );", tn)

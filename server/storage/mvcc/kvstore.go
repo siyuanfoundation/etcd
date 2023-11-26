@@ -346,6 +346,7 @@ func (s *store) restore() error {
 		// rkvc blocks if the total pending keys exceeds the restore
 		// chunk size to keep keys from consuming too much memory.
 		restoreChunk(s.lg, rkvc, keys, vals, keyToLease)
+		vals = nil
 		if len(keys) < restoreChunkKeys {
 			// partial set implies final set
 			break
@@ -466,6 +467,7 @@ func restoreChunk(lg *zap.Logger, kvc chan<- revKeyValue, keys, vals [][]byte, k
 		if err := rkv.kv.Unmarshal(vals[i]); err != nil {
 			lg.Fatal("failed to unmarshal mvccpb.KeyValue", zap.Error(err))
 		}
+		rkv.kv.Value = nil
 		rkv.kstr = string(rkv.kv.Key)
 		if isTombstone(key) {
 			delete(keyToLease, rkv.kstr)
