@@ -28,7 +28,7 @@ import (
 	"os"
 	"strings"
 
-	_ "github.com/glebarez/go-sqlite" // keep
+	_ "github.com/mattn/go-sqlite3" // keep
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
@@ -98,7 +98,7 @@ func NewSqliteDB[B BackendBucket](dir string, buckets ...B) (*SqliteDB, error) {
 	parts := strings.Split(dir, "/")
 	subdir := strings.Join(parts[:len(parts)-1], "/")
 	name := parts[len(parts)-1]
-	db, err := sql.Open("sqlite", dir)
+	db, err := sql.Open("sqlite3", dir)
 
 	if err != nil {
 		return nil, err
@@ -110,10 +110,10 @@ func NewSqliteDB[B BackendBucket](dir string, buckets ...B) (*SqliteDB, error) {
 	if err = db.Ping(); err != nil {
 		return nil, err
 	}
-	db.Exec("PRAGMA mmap_size=0;")
-	db.Exec("PRAGMA temp_store = file;")
-	db.Exec("PRAGMA page_size = 1024;")
-	db.Exec("PRAGMA cache_size = 100")
+	// db.Exec("PRAGMA mmap_size=0;")
+	// db.Exec("PRAGMA temp_store = file;")
+	// db.Exec("PRAGMA page_size = 1024;")
+	// db.Exec("PRAGMA cache_size = 100")
 	for _, b := range buckets {
 		tn := resolveTableName(string(b.Name()))
 		createTableQuery := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (key STRING PRIMARY KEY, value BLOB );", tn)

@@ -117,15 +117,6 @@
 		]
 	},
 	{
-		"project": "github.com/glebarez/go-sqlite",
-		"licenses": [
-			{
-				"type": "BSD 3-clause \"New\" or \"Revised\" License",
-				"confidence": 0.9707112970711297
-			}
-		]
-	},
-	{
 		"project": "github.com/go-logr/logr",
 		"licenses": [
 			{
@@ -190,15 +181,6 @@
 	},
 	{
 		"project": "github.com/google/go-cmp/cmp",
-		"licenses": [
-			{
-				"type": "BSD 3-clause \"New\" or \"Revised\" License",
-				"confidence": 0.9663865546218487
-			}
-		]
-	},
-	{
-		"project": "github.com/google/uuid",
 		"licenses": [
 			{
 				"type": "BSD 3-clause \"New\" or \"Revised\" License",
@@ -288,6 +270,15 @@
 		]
 	},
 	{
+		"project": "github.com/mattn/go-sqlite3",
+		"licenses": [
+			{
+				"type": "MIT License",
+				"confidence": 1
+			}
+		]
+	},
+	{
 		"project": "github.com/matttproud/golang_protobuf_extensions/v2/pbutil",
 		"licenses": [
 			{
@@ -347,15 +338,6 @@
 			{
 				"type": "Apache License 2.0",
 				"confidence": 1
-			}
-		]
-	},
-	{
-		"project": "github.com/remyoudompheng/bigfft",
-		"licenses": [
-			{
-				"type": "BSD 3-clause \"New\" or \"Revised\" License",
-				"confidence": 0.9663865546218487
 			}
 		]
 	},
@@ -743,51 +725,6 @@
 			{
 				"type": "MIT License",
 				"confidence": 0.7469879518072289
-			}
-		]
-	},
-	{
-		"project": "modernc.org/libc",
-		"licenses": [
-			{
-				"type": "BSD 3-clause \"New\" or \"Revised\" License",
-				"confidence": 0.9617021276595744
-			}
-		]
-	},
-	{
-		"project": "modernc.org/libc/honnef.co/go/netdb",
-		"licenses": [
-			{
-				"type": "MIT License",
-				"confidence": 0.9891304347826086
-			}
-		]
-	},
-	{
-		"project": "modernc.org/mathutil",
-		"licenses": [
-			{
-				"type": "BSD 3-clause \"New\" or \"Revised\" License",
-				"confidence": 0.9617021276595744
-			}
-		]
-	},
-	{
-		"project": "modernc.org/memory",
-		"licenses": [
-			{
-				"type": "BSD 3-clause \"New\" or \"Revised\" License",
-				"confidence": 0.9617021276595744
-			}
-		]
-	},
-	{
-		"project": "modernc.org/sqlite/lib",
-		"licenses": [
-			{
-				"type": "BSD 3-clause \"New\" or \"Revised\" License",
-				"confidence": 0.9707112970711297
 			}
 		]
 	},
