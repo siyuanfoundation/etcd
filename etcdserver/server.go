@@ -2557,9 +2557,11 @@ func (s *EtcdServer) monitorVersions() {
 		// 2. or use the min cluster version
 		if s.cluster.Version() == nil {
 			verStr := version.MinClusterVersion
+			s.Logger().Info("*******************************************\nsizhangDebug: before updating cluster version because s.cluster.Version() == nil", zap.String("cluster-version", verStr))
 			if v != nil {
 				verStr = v.String()
 			}
+			s.Logger().Info("*******************************************\nsizhangDebug: updating cluster version because s.cluster.Version() == nil", zap.String("cluster-version", verStr))
 			s.goAttach(func() { s.updateClusterVersion(verStr) })
 			continue
 		}
@@ -2567,6 +2569,7 @@ func (s *EtcdServer) monitorVersions() {
 		// update cluster version only if the decided version is greater than
 		// the current cluster version
 		if v != nil && s.cluster.Version().LessThan(*v) {
+			s.Logger().Info("*******************************************\nsizhangDebug: updating cluster version", zap.String("cluster-version-old", s.cluster.Version().String()), zap.String("cluster-version-new", v.String()))
 			s.goAttach(func() { s.updateClusterVersion(v.String()) })
 		}
 	}
