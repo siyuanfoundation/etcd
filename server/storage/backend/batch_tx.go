@@ -318,6 +318,7 @@ func (t *batchTxBuffered) Unlock() {
 }
 
 func (t *batchTxBuffered) Commit() {
+	t.backend.lg.Info("sizhangDebug: batchTxBuffered.Commit()")
 	t.lock()
 	t.commit(false)
 	t.Unlock()

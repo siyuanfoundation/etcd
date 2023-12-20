@@ -16,22 +16,33 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
 	pb "go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
+	"go.etcd.io/etcd/client/pkg/v3/types"
 	"go.etcd.io/etcd/pkg/v3/traceutil"
+	"go.etcd.io/etcd/server/v3/etcdserver/api/membership"
+	"go.etcd.io/etcd/server/v3/etcdserver/api/snap/snappb"
+	"go.etcd.io/etcd/server/v3/etcdserver/api/v2store"
 	"go.etcd.io/etcd/server/v3/lease/leasepb"
 	"go.etcd.io/etcd/server/v3/storage/backend"
 	"go.etcd.io/etcd/server/v3/storage/mvcc"
 	"go.etcd.io/etcd/server/v3/storage/schema"
 	"go.etcd.io/etcd/tests/v3/framework/integration"
+	"go.etcd.io/raft/v3/raftpb"
 )
 
 // TestV3StorageQuotaApply tests the V3 server respects quotas during apply
@@ -353,4 +364,106 @@ func TestV3CorruptAlarmWithLeaseCorrupted(t *testing.T) {
 			return
 		}
 	}
+}
+
+// cd tests/integration && go test -v -run TestReproduceMemberNameMismatch
+func TestReproduceMemberNameMismatch(t *testing.T) {
+	integration.BeforeTest(t)
+	lg := zaptest.NewLogger(t)
+	clus := integration.NewCluster(t, &integration.ClusterConfig{
+		CorruptCheckTime:       time.Second,
+		Size:                   3,
+		SnapshotCount:          10,
+		SnapshotCatchUpEntries: 5,
+	})
+	defer clus.Terminate(t)
+
+	for _, member := range clus.Members {
+		t.Logf("initial member name %s", member.Name)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	putr := &pb.PutRequest{Key: []byte("foo"), Value: []byte("bar")}
+	// Trigger snapshot from the leader to new member
+	for i := 0; i < 15; i++ {
+		_, err := integration.ToGRPC(clus.RandClient()).KV.Put(ctx, putr)
+		if err != nil {
+			t.Errorf("#%d: couldn't put key (%v)", i, err)
+		}
+	}
+
+	t.Logf("triggered snapshot by 15 consecutive puts")
+
+	clus.Members[2].Stop(t)
+	clus.Members[2].Name = "random"
+	clus.Members[2].Restart(t)
+	time.Sleep(2 * time.Second)
+	t.Logf("restarted 3rd member with a new name random")
+
+	clus.Members[1].Stop(t)
+	time.Sleep(time.Second)
+	snapDir := filepath.Join(clus.Members[1].DataDir, "member", "snap")
+
+	dir, err := os.Open(snapDir)
+	require.NoError(t, err)
+	defer dir.Close()
+	names, err := dir.Readdirnames(-1)
+	snapNames := make([]string, 0, len(names))
+	for _, name := range names {
+		if name == "db" {
+			continue
+		}
+		snapNames = append(snapNames, name)
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(snapNames)))
+	t.Logf("snap files names %v", snapNames)
+
+	fpath := filepath.Join(snapDir, names[0])
+	b, err := ioutil.ReadFile(fpath)
+	require.NoError(t, err)
+	var serializedSnap snappb.Snapshot
+	require.NoError(t, serializedSnap.Unmarshal(b))
+
+	var snap raftpb.Snapshot
+	require.NoError(t, snap.Unmarshal(serializedSnap.Data))
+
+	st := v2store.New("/0", "/1")
+	require.NoError(t, st.Recovery(snap.Data))
+
+	membersFromV2Store, _ := membership.MembersFromStore(zap.NewExample(), st)
+	// expect name1, name2 and random
+	// but name1, name2 and name3
+	for _, member := range membersFromV2Store {
+		t.Logf("v2store: eventual member name from member B point of view %s", member.Name)
+	}
+
+	fp := filepath.Join(clus.Members[1].DataDir, "member", "snap", "db")
+	bcfg := backend.DefaultBackendConfig(lg)
+	bcfg.Path = fp
+	bcfg.Logger = zaptest.NewLogger(t)
+	be := backend.New(bcfg)
+	tx := be.ReadTx()
+
+	membersFromBackend := make([]membership.Member, 0, 3)
+	require.NoError(t, tx.UnsafeForEach(schema.Members, func(k, v []byte) error {
+		var m membership.Member
+		if err := json.Unmarshal(v, &m); err != nil {
+			return err
+		}
+		var id types.ID
+		if id, err = types.IDFromString(string(k)); err != nil {
+			return err
+		}
+		if m.ID != id {
+			return fmt.Errorf("member ID is different, key is %s, ID in value is %s", id, m.ID)
+		}
+		membersFromBackend = append(membersFromBackend, m)
+		return nil
+	}))
+	for _, member := range membersFromBackend {
+		t.Logf("v3Backend (boltdb): eventual member name from member B point of view %s", member.Name)
+	}
+	require.NoError(t, be.Close())
 }

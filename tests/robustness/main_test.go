@@ -61,7 +61,9 @@ func testRobustness(ctx context.Context, t *testing.T, lg *zap.Logger, s testSce
 	defer report.Cluster.Close()
 
 	if s.failpoint == nil {
-		s.failpoint = failpoint.PickRandom(t, report.Cluster)
+		// PASSES="robustness" TESTCASE=TestRobustness/Kubernetes/HighTraffic/ClusterOfSize3 EXPECT_DEBUG=true ./scripts/test.sh -v
+		s.failpoint = failpoint.MemberReplace
+		// s.failpoint = failpoint.PickRandom(t, report.Cluster)
 	} else {
 		err = failpoint.Validate(report.Cluster, s.failpoint)
 		if err != nil {

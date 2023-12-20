@@ -15,6 +15,7 @@
 package backend
 
 import (
+	"fmt"
 	"math"
 	"sync"
 
@@ -131,6 +132,7 @@ func (rt *readTx) RLock()   { rt.mu.RLock() }
 func (rt *readTx) RUnlock() { rt.mu.RUnlock() }
 
 func (rt *readTx) reset() {
+	fmt.Printf("sizhangDebug: readTx.reset()\n")
 	rt.buf.reset()
 	rt.buckets = make(map[BucketID]*bolt.Bucket)
 	rt.tx = nil

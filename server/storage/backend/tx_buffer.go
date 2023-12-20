@@ -16,6 +16,7 @@ package backend
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 
 	"go.etcd.io/etcd/client/pkg/v3/verify"
@@ -112,6 +113,7 @@ func (txr *txReadBuffer) Range(bucket Bucket, key, endKey []byte, limit int64) (
 
 func (txr *txReadBuffer) ForEach(bucket Bucket, visitor func(k, v []byte) error) error {
 	if b := txr.buckets[bucket.ID()]; b != nil {
+		fmt.Printf("sizhangDebug: txReadBuffer ForEach(%s), len(buf) = %d\n", bucket.Name(), b.used)
 		return b.ForEach(visitor)
 	}
 	return nil

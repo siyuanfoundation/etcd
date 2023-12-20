@@ -265,7 +265,7 @@ func (c *RaftCluster) Recover(onSet func(*zap.Logger, *semver.Version)) {
 		c.members, c.removed = c.be.MustReadMembersFromBackend()
 	} else {
 		c.version = clusterVersionFromStore(c.lg, c.v2store)
-		c.members, c.removed = membersFromStore(c.lg, c.v2store)
+		c.members, c.removed = MembersFromStore(c.lg, c.v2store)
 	}
 	c.buildMembershipMetric()
 
@@ -305,7 +305,7 @@ func (c *RaftCluster) Recover(onSet func(*zap.Logger, *semver.Version)) {
 // ensures that it is still valid.
 func (c *RaftCluster) ValidateConfigurationChange(cc raftpb.ConfChange) error {
 	// TODO: this must be switched to backend as well.
-	membersMap, removedMap := membersFromStore(c.lg, c.v2store)
+	membersMap, removedMap := MembersFromStore(c.lg, c.v2store)
 	id := types.ID(cc.NodeID)
 	if removedMap[id] {
 		return ErrIDRemoved
@@ -390,6 +390,7 @@ func (c *RaftCluster) ValidateConfigurationChange(cc raftpb.ConfChange) error {
 func (c *RaftCluster) AddMember(m *Member, shouldApplyV3 ShouldApplyV3) {
 	c.Lock()
 	defer c.Unlock()
+	c.lg.Info("sizhangDebug: RaftCluster.AddMember", zap.String("member-id", m.ID.String()), zap.String("member-name", m.Name))
 	if c.v2store != nil {
 		mustSaveMemberToStore(c.lg, c.v2store, m)
 	}
@@ -423,6 +424,15 @@ func (c *RaftCluster) AddMember(m *Member, shouldApplyV3 ShouldApplyV3) {
 func (c *RaftCluster) RemoveMember(id types.ID, shouldApplyV3 ShouldApplyV3) {
 	c.Lock()
 	defer c.Unlock()
+	c.lg.Info("sizhangDebug: RaftCluster.RemoveMember", zap.String("member-id", id.String()))
+	members, _ := c.be.MustReadMembersFromBackend()
+	memberIds := []string{}
+	memberNames := []string{}
+	for m, info := range members {
+		memberIds = append(memberIds, m.String())
+		memberNames = append(memberNames, info.Name)
+	}
+	c.lg.Info("sizhangDebug: before RemoveMember, remaining members", zap.String("member-id", strings.Join(memberIds, ",")), zap.String("member-name", strings.Join(memberNames, ",")))
 	if c.v2store != nil {
 		mustDeleteMemberFromStore(c.lg, c.v2store, id)
 	}
@@ -459,11 +469,22 @@ func (c *RaftCluster) RemoveMember(id types.ID, shouldApplyV3 ShouldApplyV3) {
 			zap.String("removed-remote-peer-id", id.String()),
 		)
 	}
+	members, _ = c.be.MustReadMembersFromBackend()
+	memberIds = []string{}
+	memberNames = []string{}
+	for m, info := range members {
+		memberIds = append(memberIds, m.String())
+		memberNames = append(memberNames, info.Name)
+	}
+	c.lg.Info("sizhangDebug: after RemoveMember, remaining members", zap.String("member-id", strings.Join(memberIds, ",")), zap.String("member-name", strings.Join(memberNames, ",")))
+
 }
 
 func (c *RaftCluster) UpdateAttributes(id types.ID, attr Attributes, shouldApplyV3 ShouldApplyV3) {
 	c.Lock()
 	defer c.Unlock()
+	c.lg.Info("sizhangDebug: before UpdateAttributes", zap.String("local-member-id", c.localID.String()), zap.String("local-member-name", c.members[c.localID].Name))
+	// c.lg.Info("sizhangDebug: before UpdateAttributes", zap.String("local-member-id", c.localID.String()), zap.String("cluster", c.String()))
 
 	if m, ok := c.members[id]; ok {
 		m.Attributes = attr
@@ -472,6 +493,11 @@ func (c *RaftCluster) UpdateAttributes(id types.ID, attr Attributes, shouldApply
 		}
 		if c.be != nil && shouldApplyV3 {
 			c.be.MustSaveMemberToBackend(m)
+		}
+		c.lg.Info("sizhangDebug: after UpdateAttributes", zap.String("local-member-id", c.localID.String()), zap.String("local-member-name", c.members[c.localID].Name))
+		members, _ := c.be.MustReadMembersFromBackend()
+		for mid, m := range members {
+			c.lg.Info("sizhangDebug: ReadMembersFromBackend", zap.String("member-id", mid.String()), zap.String("member-name", m.Name))
 		}
 		return
 	}
@@ -555,6 +581,7 @@ func (c *RaftCluster) UpdateRaftAttributes(id types.ID, raftAttr RaftAttributes,
 			zap.Bool("updated-remote-peer-is-learner", raftAttr.IsLearner),
 		)
 	}
+	fmt.Printf("sizhangDebug: after UpdateRaftAttributes: memberId = %s, cluster = %v\n", c.localID.String(), c.String())
 }
 
 func (c *RaftCluster) Version() *semver.Version {
@@ -694,7 +721,7 @@ func (c *RaftCluster) IsReadyToPromoteMember(id uint64) bool {
 	return true
 }
 
-func membersFromStore(lg *zap.Logger, st v2store.Store) (map[types.ID]*Member, map[types.ID]bool) {
+func MembersFromStore(lg *zap.Logger, st v2store.Store) (map[types.ID]*Member, map[types.ID]bool) {
 	members := make(map[types.ID]*Member)
 	removed := make(map[types.ID]bool)
 	e, err := st.Get(StoreMembersPrefix, true, true)

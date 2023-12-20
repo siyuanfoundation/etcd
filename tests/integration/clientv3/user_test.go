@@ -55,6 +55,65 @@ func TestUserError(t *testing.T) {
 	}
 }
 
+func TestAddUserAfterDelete(t *testing.T) {
+	integration2.BeforeTest(t)
+
+	clus := integration2.NewCluster(t, &integration2.ClusterConfig{Size: 1})
+	defer clus.Terminate(t)
+
+	authapi := clus.RandClient()
+	authSetupRoot(t, authapi.Auth)
+	cfg := clientv3.Config{
+		Endpoints:   authapi.Endpoints(),
+		DialTimeout: 5 * time.Second,
+		DialOptions: []grpc.DialOption{grpc.WithBlock()},
+	}
+	cfg.Username, cfg.Password = "root", "123"
+	authed, err := integration2.NewClient(t, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer authed.Close()
+
+	if _, err = authed.UserAdd(context.TODO(), "foo", "bar"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = authapi.Authenticate(context.TODO(), "foo", "bar"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = authed.UserDelete(context.TODO(), "foo"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = authed.Authenticate(context.TODO(), "foo", "bar"); err == nil {
+		t.Errorf("expect Authenticate error for old password")
+	}
+
+	if _, err = authed.UserAdd(context.TODO(), "foo", "bar"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = authed.Authenticate(context.TODO(), "foo", "bar"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = authed.UserChangePassword(context.TODO(), "foo", "bar1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = authed.UserChangePassword(context.TODO(), "foo", "bar2"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = authed.Authenticate(context.TODO(), "foo", "bar"); err == nil {
+		t.Errorf("expect Authenticate error for old password")
+	}
+	if _, err = authed.Authenticate(context.TODO(), "foo", "bar1"); err == nil {
+		t.Errorf("expect Authenticate error for old password")
+	}
+	if _, err = authed.Authenticate(context.TODO(), "foo", "bar2"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestUserErrorAuth(t *testing.T) {
 	integration2.BeforeTest(t)
 

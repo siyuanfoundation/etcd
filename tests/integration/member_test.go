@@ -18,9 +18,13 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
+	"go.etcd.io/etcd/server/v3/etcdserver"
+	"go.etcd.io/etcd/server/v3/storage/backend"
+	"go.etcd.io/etcd/server/v3/storage/schema"
 	"go.etcd.io/etcd/tests/v3/framework/integration"
 )
 
@@ -114,4 +118,63 @@ func TestSnapshotAndRestartMember(t *testing.T) {
 			t.Errorf("#%d: got = %v, want %v", i, resp.Kvs[0], "bar")
 		}
 	}
+}
+
+func TestRemoveMember(t *testing.T) {
+	integration.BeforeTest(t)
+	c := integration.NewCluster(t, &integration.ClusterConfig{Size: 3, UseBridge: true, BackendBatchInterval: 1000 * time.Second})
+	defer c.Terminate(t)
+	c.WaitLeader(t)
+	time.Sleep(etcdserver.HealthInterval)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	_, err := c.Members[2].Client.MemberRemove(ctx, uint64(c.Members[0].Server.MemberId()))
+	cancel()
+
+	if err != nil {
+		t.Fatalf("should accept removing member: %s", err)
+	}
+	// fmt.Printf("sizhangDebug: removed member m0, memberCount(m1) = %d, memberCount(m2) = %d\n", mustReadMemberCountFromBackend(t, c.Members[1].Server.Backend()), mustReadMemberCountFromBackend(t, c.Members[2].Server.Backend()))
+	c.Members[0].Stop(t)
+	time.Sleep(etcdserver.HealthInterval)
+
+	// check member count in m1 is correct.
+	memberCount := mustReadMemberCountFromBackend(t, c.Members[1].Server.Backend())
+	if memberCount != 3 {
+		t.Errorf("Expect MemberCountFromBackend=3 after deleting 1 member, got %d", memberCount)
+	}
+	membersResp, err := c.Members[1].Client.MemberList(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(membersResp.Members) != 2 {
+		t.Errorf("Expect len(MemberList)=2 after deleting 1 members, got %d", len(membersResp.Members))
+	}
+	// check member count in m2 is correct.
+	memberCount = mustReadMemberCountFromBackend(t, c.Members[2].Server.Backend())
+	if memberCount != 3 {
+		t.Errorf("Expect MemberCountFromBackend=3 after deleting 1 member, got %d", memberCount)
+	}
+	membersResp, err = c.Members[2].Client.MemberList(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(membersResp.Members) != 2 {
+		t.Errorf("Expect len(MemberList)=2 after deleting 1 members, got %d", len(membersResp.Members))
+	}
+}
+
+func mustReadMemberCountFromBackend(t *testing.T, be backend.Backend) int {
+	tx := be.ReadTx()
+	tx.RLock()
+	defer tx.RUnlock()
+	count := 0
+	err := tx.UnsafeForEach(schema.Members, func(k, v []byte) error {
+		count++
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return count
 }

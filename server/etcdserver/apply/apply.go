@@ -16,6 +16,7 @@ package apply
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/gogo/protobuf/proto"
@@ -435,6 +436,7 @@ func (a *applierMembership) ClusterMemberAttrSet(r *membershippb.ClusterMemberAt
 		},
 		shouldApplyV3,
 	)
+	fmt.Printf("sizhangDebug: after UpdateAttributes: cluster = %v\n", a.cluster.String())
 }
 
 func (a *applierMembership) DowngradeInfoSet(r *membershippb.DowngradeInfoSetRequest, shouldApplyV3 membership.ShouldApplyV3) {

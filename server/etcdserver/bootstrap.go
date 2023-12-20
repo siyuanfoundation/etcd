@@ -91,11 +91,13 @@ func bootstrap(cfg config.ServerConfig) (b *bootstrappedServer, err error) {
 	}
 
 	cfg.Logger.Info("bootstrapping cluster")
+
 	cluster, err := bootstrapCluster(cfg, bwal, prt)
 	if err != nil {
 		backend.Close()
 		return nil, err
 	}
+	fmt.Printf("sizhangDebug: cfg.Name = %s, bootstrapCluster cluster = %v\n", cfg.Name, cluster.cl.String())
 
 	cfg.Logger.Info("bootstrapping storage")
 	s := bootstrapStorage(cfg, st, backend, bwal, cluster)
@@ -104,6 +106,7 @@ func bootstrap(cfg config.ServerConfig) (b *bootstrappedServer, err error) {
 		backend.Close()
 		return nil, err
 	}
+	fmt.Printf("sizhangDebug: cfg.Name = %s, Finalize cluster = %v\n", cfg.Name, cluster.cl.String())
 
 	cfg.Logger.Info("bootstrapping raft")
 	raft := bootstrapRaft(cfg, cluster, s.wal)
@@ -264,10 +267,13 @@ func maybeDefragBackend(cfg config.ServerConfig, be backend.Backend) error {
 func bootstrapCluster(cfg config.ServerConfig, bwal *bootstrappedWAL, prt http.RoundTripper) (c *bootstrapedCluster, err error) {
 	switch {
 	case bwal == nil && !cfg.NewCluster:
+		fmt.Printf("sizhangDebug: bootstrapExistingClusterNoWAL\n")
 		c, err = bootstrapExistingClusterNoWAL(cfg, prt)
 	case bwal == nil && cfg.NewCluster:
+		fmt.Printf("sizhangDebug: bootstrapNewClusterNoWAL\n")
 		c, err = bootstrapNewClusterNoWAL(cfg, prt)
 	case bwal != nil && bwal.haveWAL:
+		fmt.Printf("sizhangDebug: bootstrapClusterWithWAL\n")
 		c, err = bootstrapClusterWithWAL(cfg, bwal.meta)
 	default:
 		return nil, fmt.Errorf("unsupported bootstrap config")
@@ -286,7 +292,9 @@ func bootstrapExistingClusterNoWAL(cfg config.ServerConfig, prt http.RoundTrippe
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("sizhangDebug: bootstrapExistingClusterNoWAL NewClusterFromURLsMap = %v\n", cl.String())
 	existingCluster, gerr := GetClusterFromRemotePeers(cfg.Logger, getRemotePeerURLs(cl, cfg.Name), prt)
+	fmt.Printf("sizhangDebug: bootstrapExistingClusterNoWAL GetClusterFromRemotePeers = %v\n", cl.String())
 	if gerr != nil {
 		return nil, fmt.Errorf("cannot fetch cluster info from peer urls: %v", gerr)
 	}
@@ -372,6 +380,7 @@ func bootstrapClusterWithWAL(cfg config.ServerConfig, meta *snapshotMetadata) (*
 	}
 
 	cl.SetID(meta.nodeID, meta.clusterID)
+	fmt.Printf("sizhangDebug: bootstrapClusterWithWAL cluster = %v\n", cl.String())
 	return &bootstrapedCluster{
 		cl:     cl,
 		nodeID: meta.nodeID,

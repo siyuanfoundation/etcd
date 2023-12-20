@@ -324,10 +324,12 @@ func (b *backend) ConcurrentReadTx() ReadTx {
 
 // ForceCommit forces the current batching tx to commit.
 func (b *backend) ForceCommit() {
+	b.lg.Info("sizhangDebug: backend.ForceCommit()\n")
 	b.batchTx.Commit()
 }
 
 func (b *backend) Snapshot() Snapshot {
+	b.lg.Info("sizhangDebug: backend.Snapshot()\n")
 	b.batchTx.Commit()
 
 	b.mu.RLock()
@@ -422,6 +424,7 @@ func (b *backend) run() {
 			return
 		}
 		if b.batchTx.safePending() != 0 {
+			b.lg.Info("sizhangDebug: backend.batchInterval\n")
 			b.batchTx.Commit()
 		}
 		t.Reset(b.batchInterval)

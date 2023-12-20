@@ -1334,6 +1334,7 @@ func (s *EtcdServer) checkMembershipOperationPermission(ctx context.Context) err
 }
 
 func (s *EtcdServer) AddMember(ctx context.Context, memb membership.Member) ([]*membership.Member, error) {
+	s.lg.Info("sizhangDebug: EtcdServer.AddMember", zap.String("member-id", memb.ID.String()), zap.String("member-name", memb.Name))
 	if err := s.checkMembershipOperationPermission(ctx); err != nil {
 		return nil, err
 	}
@@ -1759,6 +1760,7 @@ func (s *EtcdServer) publishV3(timeout time.Duration) {
 				zap.String("cluster-id", s.cluster.ID().String()),
 				zap.Duration("publish-timeout", timeout),
 			)
+			fmt.Printf("sizhangDebug: after publishV3, cluster = %v\n", s.cluster.String())
 			return
 
 		default:
