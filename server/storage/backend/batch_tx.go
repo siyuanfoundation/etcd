@@ -371,3 +371,9 @@ func (t *batchTxBuffered) UnsafeSeqPut(bucket Bucket, key []byte, value []byte) 
 	t.batchTx.UnsafeSeqPut(bucket, key, value)
 	t.buf.putSeq(bucket, key, value)
 }
+
+// UnsafeDelete must be called holding the lock on the tx.
+func (t *batchTxBuffered) UnsafeDelete(bucketType Bucket, key []byte) {
+	t.buf.delete(bucketType, key)
+	t.batchTx.UnsafeDelete(bucketType, key)
+}

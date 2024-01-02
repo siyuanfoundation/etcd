@@ -26,7 +26,7 @@ func Test_bucketBuffer_CopyUsed_After_Add(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		k := fmt.Sprintf("key%d", i)
 		v := fmt.Sprintf("val%d", i)
-		bb.add([]byte(k), []byte(v))
+		bb.add([]byte(k), []byte(v), false)
 		bbCopy := bb.CopyUsed()
 		assert.Equal(t, bb.used, bbCopy.used)
 		assert.Equal(t, bbCopy.used, len(bbCopy.buf))

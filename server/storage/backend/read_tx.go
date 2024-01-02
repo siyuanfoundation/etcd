@@ -15,6 +15,7 @@
 package backend
 
 import (
+	"fmt"
 	"math"
 	"sync"
 
@@ -90,6 +91,8 @@ func (baseReadTx *baseReadTx) UnsafeRange(bucketType Bucket, key, endKey []byte,
 	if int64(len(keys)) == limit {
 		return keys, vals
 	}
+
+	fmt.Printf("sizhangDebug: keep searching in baseReadTx.buckets\n")
 
 	// find/cache bucket
 	bn := bucketType.ID()

@@ -16,6 +16,7 @@ package backend
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 
 	"go.etcd.io/etcd/client/pkg/v3/verify"
@@ -46,6 +47,16 @@ type txWriteBuffer struct {
 	bucket2seq map[BucketID]bool
 }
 
+func (txw *txWriteBuffer) delete(bucket Bucket, k []byte) {
+	b, ok := txw.buckets[bucket.ID()]
+	if !ok {
+		b = newBucketBuffer()
+		txw.buckets[bucket.ID()] = b
+	}
+	fmt.Printf("sizhangDebug: deleting key %s\n", string(k))
+	b.add(k, nil, true)
+}
+
 func (txw *txWriteBuffer) put(bucket Bucket, k, v []byte) {
 	txw.bucket2seq[bucket.ID()] = false
 	txw.putInternal(bucket, k, v)
@@ -62,7 +73,7 @@ func (txw *txWriteBuffer) putInternal(bucket Bucket, k, v []byte) {
 		b = newBucketBuffer()
 		txw.buckets[bucket.ID()] = b
 	}
-	b.add(k, v)
+	b.add(k, v, false)
 }
 
 func (txw *txWriteBuffer) reset() {
@@ -132,8 +143,9 @@ func (txr *txReadBuffer) unsafeCopy() txReadBuffer {
 }
 
 type kv struct {
-	key []byte
-	val []byte
+	key     []byte
+	val     []byte
+	deleted bool
 }
 
 // bucketBuffer buffers key-value pairs that are pending commit.
@@ -154,7 +166,7 @@ func (bb *bucketBuffer) Range(key, endKey []byte, limit int64) (keys [][]byte, v
 		return nil, nil
 	}
 	if len(endKey) == 0 {
-		if bytes.Equal(key, bb.buf[idx].key) {
+		if bytes.Equal(key, bb.buf[idx].key) && !bb.buf[idx].deleted {
 			keys = append(keys, bb.buf[idx].key)
 			vals = append(vals, bb.buf[idx].val)
 		}
@@ -167,8 +179,10 @@ func (bb *bucketBuffer) Range(key, endKey []byte, limit int64) (keys [][]byte, v
 		if bytes.Compare(endKey, bb.buf[i].key) <= 0 {
 			break
 		}
-		keys = append(keys, bb.buf[i].key)
-		vals = append(vals, bb.buf[i].val)
+		if !bb.buf[i].deleted {
+			keys = append(keys, bb.buf[i].key)
+			vals = append(vals, bb.buf[i].val)
+		}
 	}
 	return keys, vals
 }
@@ -182,8 +196,8 @@ func (bb *bucketBuffer) ForEach(visitor func(k, v []byte) error) error {
 	return nil
 }
 
-func (bb *bucketBuffer) add(k, v []byte) {
-	bb.buf[bb.used].key, bb.buf[bb.used].val = k, v
+func (bb *bucketBuffer) add(k, v []byte, deleted bool) {
+	bb.buf[bb.used].key, bb.buf[bb.used].val, bb.buf[bb.used].deleted = k, v, deleted
 	bb.used++
 	if bb.used == len(bb.buf) {
 		buf := make([]kv, (3*len(bb.buf))/2)
@@ -195,7 +209,7 @@ func (bb *bucketBuffer) add(k, v []byte) {
 // merge merges data from bbsrc into bb.
 func (bb *bucketBuffer) merge(bbsrc *bucketBuffer) {
 	for i := 0; i < bbsrc.used; i++ {
-		bb.add(bbsrc.buf[i].key, bbsrc.buf[i].val)
+		bb.add(bbsrc.buf[i].key, bbsrc.buf[i].val, bbsrc.buf[i].deleted)
 	}
 	if bb.used == bbsrc.used {
 		return
