@@ -292,9 +292,9 @@ func bootstrapExistingClusterNoWAL(cfg config.ServerConfig, prt http.RoundTrippe
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("sizhangDebug: bootstrapExistingClusterNoWAL NewClusterFromURLsMap = %v\n", cl.String())
+	cfg.Logger.Info("sizhangDebug: bootstrapExistingClusterNoWAL NewClusterFromURLsMap", zap.String("cluster", cl.String()))
 	existingCluster, gerr := GetClusterFromRemotePeers(cfg.Logger, getRemotePeerURLs(cl, cfg.Name), prt)
-	fmt.Printf("sizhangDebug: bootstrapExistingClusterNoWAL GetClusterFromRemotePeers = %v\n", cl.String())
+	cfg.Logger.Info("sizhangDebug: bootstrapExistingClusterNoWAL GetClusterFromRemotePeers", zap.String("cluster", existingCluster.String()))
 	if gerr != nil {
 		return nil, fmt.Errorf("cannot fetch cluster info from peer urls: %v", gerr)
 	}

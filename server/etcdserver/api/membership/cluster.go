@@ -263,9 +263,11 @@ func (c *RaftCluster) Recover(onSet func(*zap.Logger, *semver.Version)) {
 	if c.be != nil {
 		c.version = c.be.ClusterVersionFromBackend()
 		c.members, c.removed = c.be.MustReadMembersFromBackend()
+		c.lg.Info("sizhangDebug: MustReadMembersFromBackend", zap.Int("member-count", len(c.members)))
 	} else {
 		c.version = clusterVersionFromStore(c.lg, c.v2store)
 		c.members, c.removed = MembersFromStore(c.lg, c.v2store)
+		c.lg.Info("sizhangDebug: Members from V2 store", zap.Int("member-count", len(c.members)))
 	}
 	c.buildMembershipMetric()
 

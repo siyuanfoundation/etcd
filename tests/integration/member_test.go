@@ -127,15 +127,10 @@ func TestRemoveMember(t *testing.T) {
 	c.WaitLeader(t)
 	time.Sleep(etcdserver.HealthInterval)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	_, err := c.Members[2].Client.MemberRemove(ctx, uint64(c.Members[0].Server.MemberId()))
-	cancel()
-
+	err := c.RemoveMember(t, c.Client(2), uint64(c.Members[0].ID()))
 	if err != nil {
 		t.Fatalf("should accept removing member: %s", err)
 	}
-	// fmt.Printf("sizhangDebug: removed member m0, memberCount(m1) = %d, memberCount(m2) = %d\n", mustReadMemberCountFromBackend(t, c.Members[1].Server.Backend()), mustReadMemberCountFromBackend(t, c.Members[2].Server.Backend()))
-	c.Members[0].Stop(t)
 	time.Sleep(etcdserver.HealthInterval)
 
 	// check member count in m1 is correct.
@@ -151,11 +146,11 @@ func TestRemoveMember(t *testing.T) {
 		t.Errorf("Expect len(MemberList)=2 after deleting 1 members, got %d", len(membersResp.Members))
 	}
 	// check member count in m2 is correct.
-	memberCount = mustReadMemberCountFromBackend(t, c.Members[2].Server.Backend())
+	memberCount = mustReadMemberCountFromBackend(t, c.Members[1].Server.Backend())
 	if memberCount != 3 {
 		t.Errorf("Expect MemberCountFromBackend=3 after deleting 1 member, got %d", memberCount)
 	}
-	membersResp, err = c.Members[2].Client.MemberList(context.Background())
+	membersResp, err = c.Members[1].Client.MemberList(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
