@@ -59,7 +59,7 @@ type testScenario struct {
 	watch     watchConfig
 }
 
-func exploratoryScenarios(t *testing.T) []testScenario {
+func exploratoryScenarios(t *testing.T, clusterVersion e2e.ClusterVersion, binaryPath string, enableGoFail bool) []testScenario {
 	v, err := e2e.GetVersionFromBinary(e2e.BinPath.Etcd)
 	if err != nil {
 		t.Fatalf("Failed checking etcd version binary, binary: %q, err: %v", e2e.BinPath.Etcd, err)
@@ -73,9 +73,10 @@ func exploratoryScenarios(t *testing.T) []testScenario {
 	}
 
 	baseOptions := []e2e.EPClusterOption{
+		e2e.WithVersion(clusterVersion),
 		options.WithSnapshotCount(50, 100, 1000),
 		options.WithSubsetOptions(randomizableOptions...),
-		e2e.WithGoFailEnabled(true),
+		e2e.WithGoFailEnabled(enableGoFail),
 		e2e.WithCompactionBatchLimit(100),
 		e2e.WithWatchProcessNotifyInterval(100 * time.Millisecond),
 	}

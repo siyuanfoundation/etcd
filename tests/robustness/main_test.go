@@ -41,7 +41,7 @@ func TestMain(m *testing.M) {
 
 func TestRobustnessExploratory(t *testing.T) {
 	testRunner.BeforeTest(t)
-	for _, scenario := range exploratoryScenarios(t) {
+	for _, scenario := range exploratoryScenarios(t, e2e.CurrentVersion, e2e.BinPath.Etcd, false) {
 		t.Run(scenario.name, func(t *testing.T) {
 			lg := zaptest.NewLogger(t)
 			scenario.cluster.Logger = lg
