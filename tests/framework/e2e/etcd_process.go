@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"testing"
 	"time"
 
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
@@ -35,6 +36,7 @@ import (
 var (
 	EtcdServerReadyLines = []string{"ready to serve client requests"}
 	BinPath              string
+	BinPathLastRelease   string
 	CtlBinPath           string
 	UtlBinPath           string
 )
@@ -46,6 +48,7 @@ type EtcdProcess interface {
 	EndpointsGRPC() []string
 	EndpointsHTTP() []string
 	EndpointsMetrics() []string
+	Etcdctl() *Etcdctl
 
 	Start() error
 	Restart() error
@@ -124,6 +127,10 @@ func (ep *EtcdServerProcess) EndpointsHTTP() []string {
 	return []string{ep.cfg.ClientHttpUrl}
 }
 func (ep *EtcdServerProcess) EndpointsMetrics() []string { return []string{ep.cfg.Murl} }
+
+func (ep *EtcdServerProcess) Etcdctl() *Etcdctl {
+	return NewEtcdctl(ep.EndpointsV3(), ClientNonTLS, false, false)
+}
 
 func (ep *EtcdServerProcess) Start() error {
 	if ep.proc != nil {
@@ -224,6 +231,14 @@ func (ep *EtcdServerProcess) Logs() LogsExpect {
 		ep.cfg.lg.Panic("Please grap logs before process is stopped")
 	}
 	return ep.proc
+}
+
+func AssertProcessLogs(t *testing.T, ep EtcdProcess, expectLog string) {
+	t.Helper()
+	_, err := ep.Logs().Expect(expectLog)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (ep *EtcdServerProcess) PeerProxy() proxy.Server {

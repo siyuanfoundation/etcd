@@ -15,6 +15,7 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -37,6 +38,8 @@ const (
 	ClientNonTLS ClientConnType = iota
 	ClientTLS
 	ClientTLSAndNonTLS
+
+	TickDuration = 10 * time.Millisecond
 )
 
 func NewConfigNoTLS() *EtcdProcessClusterConfig {
@@ -131,18 +134,20 @@ func ConfigStandalone(cfg EtcdProcessClusterConfig) *EtcdProcessClusterConfig {
 }
 
 type EtcdProcessCluster struct {
-	lg    *zap.Logger
-	Cfg   *EtcdProcessClusterConfig
-	Procs []EtcdProcess
+	lg      *zap.Logger
+	Cfg     *EtcdProcessClusterConfig
+	Procs   []EtcdProcess
+	nextSeq int // sequence number of the next etcd process (if it will be required)
 }
 
 type EtcdProcessClusterConfig struct {
-	ExecPath      string
 	DataDirPath   string
 	KeepDataDir   bool
+	Logger        *zap.Logger
 	GoFailEnabled bool
 	PeerProxy     bool
 	EnvVars       map[string]string
+	Version       ClusterVersion
 
 	ClusterSize int
 
@@ -202,9 +207,10 @@ func InitEtcdProcessCluster(t testing.TB, cfg *EtcdProcessClusterConfig) (*EtcdP
 
 	etcdCfgs := cfg.EtcdServerProcessConfigs(t)
 	epc := &EtcdProcessCluster{
-		Cfg:   cfg,
-		lg:    zaptest.NewLogger(t),
-		Procs: make([]EtcdProcess, cfg.ClusterSize),
+		Cfg:     cfg,
+		lg:      zaptest.NewLogger(t),
+		Procs:   make([]EtcdProcess, cfg.ClusterSize),
+		nextSeq: cfg.ClusterSize,
 	}
 
 	// launch etcd processes
@@ -258,14 +264,175 @@ func (cfg *EtcdProcessClusterConfig) PeerScheme() string {
 	return peerScheme
 }
 
-func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfigs(tb testing.TB) []*EtcdServerProcessConfig {
-	lg := zaptest.NewLogger(tb)
+func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfig(tb testing.TB, i int) *EtcdServerProcessConfig {
+	var curls []string
+	var curl string
+	port := cfg.BasePort + 5*i
+	clientPort := port
+	peerPort := port + 1
+	peer2Port := port + 3
+	clientHttpPort := port + 4
 
+	if cfg.ClientTLS == ClientTLSAndNonTLS {
+		curl = clientURL(clientPort, ClientNonTLS)
+		curls = []string{curl, clientURL(clientPort, ClientTLS)}
+	} else {
+		curl = clientURL(clientPort, cfg.ClientTLS)
+		curls = []string{curl}
+	}
+
+	purl := url.URL{Scheme: cfg.PeerScheme(), Host: fmt.Sprintf("localhost:%d", peerPort)}
+	peerAdvertiseUrl := url.URL{Scheme: cfg.PeerScheme(), Host: fmt.Sprintf("localhost:%d", peerPort)}
+	var proxyCfg *proxy.ServerConfig
+	if cfg.PeerProxy {
+		if !cfg.IsPeerTLS {
+			panic("Can't use peer proxy without peer TLS as it can result in malformed packets")
+		}
+		peerAdvertiseUrl.Host = fmt.Sprintf("localhost:%d", peer2Port)
+		proxyCfg = &proxy.ServerConfig{
+			Logger: zap.NewNop(),
+			To:     purl,
+			From:   peerAdvertiseUrl,
+		}
+	}
+
+	name := fmt.Sprintf("test-%d", i)
+	dataDirPath := cfg.DataDirPath
+	if cfg.DataDirPath == "" {
+		dataDirPath = tb.TempDir()
+	}
+
+	args := []string{
+		"--name", name,
+		"--listen-client-urls", strings.Join(curls, ","),
+		"--advertise-client-urls", strings.Join(curls, ","),
+		"--listen-peer-urls", purl.String(),
+		"--initial-advertise-peer-urls", peerAdvertiseUrl.String(),
+		"--initial-cluster-token", cfg.InitialToken,
+		"--data-dir", dataDirPath,
+		"--snapshot-count", fmt.Sprintf("%d", cfg.SnapshotCount),
+	}
+	var clientHttpUrl string
+	if cfg.ClientHttpSeparate {
+		clientHttpUrl = clientURL(clientHttpPort, cfg.ClientTLS)
+		args = append(args, "--listen-client-http-urls", clientHttpUrl)
+	}
+	args = AddV2Args(args)
+	if cfg.ForceNewCluster {
+		args = append(args, "--force-new-cluster")
+	}
+	if cfg.QuotaBackendBytes > 0 {
+		args = append(args,
+			"--quota-backend-bytes", fmt.Sprintf("%d", cfg.QuotaBackendBytes),
+		)
+	}
+	if cfg.NoStrictReconfig {
+		args = append(args, "--strict-reconfig-check=false")
+	}
+	if cfg.EnableV2 {
+		args = append(args, "--enable-v2")
+	}
+	if cfg.InitialCorruptCheck {
+		args = append(args, "--experimental-initial-corrupt-check")
+	}
+	var murl string
+	if cfg.MetricsURLScheme != "" {
+		murl = (&url.URL{
+			Scheme: cfg.MetricsURLScheme,
+			Host:   fmt.Sprintf("localhost:%d", port+2),
+		}).String()
+		args = append(args, "--listen-metrics-urls", murl)
+	}
+
+	args = append(args, cfg.TlsArgs()...)
+
+	if cfg.AuthTokenOpts != "" {
+		args = append(args, "--auth-token", cfg.AuthTokenOpts)
+	}
+
+	if cfg.V2deprecation != "" {
+		args = append(args, "--v2-deprecation", cfg.V2deprecation)
+	}
+
+	if cfg.LogLevel != "" {
+		args = append(args, "--log-level", cfg.LogLevel)
+	}
+
+	if cfg.MaxConcurrentStreams != 0 {
+		args = append(args, "--max-concurrent-streams", fmt.Sprintf("%d", cfg.MaxConcurrentStreams))
+	}
+
+	if cfg.CorruptCheckTime != 0 {
+		args = append(args, "--experimental-corrupt-check-time", fmt.Sprintf("%s", cfg.CorruptCheckTime))
+	}
+	if cfg.CompactHashCheckEnabled {
+		args = append(args, "--experimental-compact-hash-check-enabled")
+	}
+	if cfg.CompactHashCheckTime != 0 {
+		args = append(args, "--experimental-compact-hash-check-time", cfg.CompactHashCheckTime.String())
+	}
+	if cfg.WatchProcessNotifyInterval != 0 {
+		args = append(args, "--experimental-watch-progress-notify-interval", cfg.WatchProcessNotifyInterval.String())
+	}
+	if cfg.CompactionBatchLimit != 0 {
+		args = append(args, "--experimental-compaction-batch-limit", fmt.Sprintf("%d", cfg.CompactionBatchLimit))
+	}
+
+	envVars := map[string]string{}
+	for key, value := range cfg.EnvVars {
+		envVars[key] = value
+	}
+	var gofailPort int
+	if cfg.GoFailEnabled {
+		gofailPort = (i+1)*10000 + 2381
+		envVars["GOFAIL_HTTP"] = fmt.Sprintf("127.0.0.1:%d", gofailPort)
+	}
+
+	var execPath string
+	switch cfg.Version {
+	case CurrentVersion:
+		execPath = BinPath
+	case MinorityLastVersion:
+		if i <= cfg.ClusterSize/2 {
+			execPath = BinPath
+		} else {
+			execPath = BinPathLastRelease
+		}
+	case QuorumLastVersion:
+		if i <= cfg.ClusterSize/2 {
+			execPath = BinPathLastRelease
+		} else {
+			execPath = BinPath
+		}
+	case LastVersion:
+		execPath = BinPathLastRelease
+	default:
+		panic(fmt.Sprintf("Unknown cluster version %v", cfg.Version))
+	}
+
+	return &EtcdServerProcessConfig{
+		lg:            cfg.Logger,
+		ExecPath:      execPath,
+		Args:          args,
+		EnvVars:       envVars,
+		TlsArgs:       cfg.TlsArgs(),
+		DataDirPath:   dataDirPath,
+		KeepDataDir:   cfg.KeepDataDir,
+		Name:          name,
+		Purl:          peerAdvertiseUrl,
+		Acurl:         curl,
+		Murl:          murl,
+		InitialToken:  cfg.InitialToken,
+		ClientHttpUrl: clientHttpUrl,
+		GoFailPort:    gofailPort,
+		Proxy:         proxyCfg,
+	}
+}
+
+func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfigs(tb testing.TB) []*EtcdServerProcessConfig {
+	cfg.Logger = zaptest.NewLogger(tb)
 	if cfg.BasePort == 0 {
 		cfg.BasePort = EtcdProcessBasePort
-	}
-	if cfg.ExecPath == "" {
-		cfg.ExecPath = BinPath
 	}
 	if cfg.SnapshotCount == 0 {
 		cfg.SnapshotCount = etcdserver.DefaultSnapshotCount
@@ -274,153 +441,12 @@ func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfigs(tb testing.TB) []*
 	etcdCfgs := make([]*EtcdServerProcessConfig, cfg.ClusterSize)
 	initialCluster := make([]string, cfg.ClusterSize)
 	for i := 0; i < cfg.ClusterSize; i++ {
-		var curls []string
-		var curl string
-		port := cfg.BasePort + 5*i
-		clientPort := port
-		peerPort := port + 1
-		peer2Port := port + 3
-		clientHttpPort := port + 4
-
-		if cfg.ClientTLS == ClientTLSAndNonTLS {
-			curl = clientURL(clientPort, ClientNonTLS)
-			curls = []string{curl, clientURL(clientPort, ClientTLS)}
-		} else {
-			curl = clientURL(clientPort, cfg.ClientTLS)
-			curls = []string{curl}
-		}
-
-		purl := url.URL{Scheme: cfg.PeerScheme(), Host: fmt.Sprintf("localhost:%d", peerPort)}
-		peerAdvertiseUrl := url.URL{Scheme: cfg.PeerScheme(), Host: fmt.Sprintf("localhost:%d", peerPort)}
-		var proxyCfg *proxy.ServerConfig
-		if cfg.PeerProxy {
-			if !cfg.IsPeerTLS {
-				panic("Can't use peer proxy without peer TLS as it can result in malformed packets")
-			}
-			peerAdvertiseUrl.Host = fmt.Sprintf("localhost:%d", peer2Port)
-			proxyCfg = &proxy.ServerConfig{
-				Logger: zap.NewNop(),
-				To:     purl,
-				From:   peerAdvertiseUrl,
-			}
-		}
-
-		name := fmt.Sprintf("test-%d", i)
-		dataDirPath := cfg.DataDirPath
-		if cfg.DataDirPath == "" {
-			dataDirPath = tb.TempDir()
-		}
-		initialCluster[i] = fmt.Sprintf("%s=%s", name, peerAdvertiseUrl.String())
-
-		args := []string{
-			"--name", name,
-			"--listen-client-urls", strings.Join(curls, ","),
-			"--advertise-client-urls", strings.Join(curls, ","),
-			"--listen-peer-urls", purl.String(),
-			"--initial-advertise-peer-urls", peerAdvertiseUrl.String(),
-			"--initial-cluster-token", cfg.InitialToken,
-			"--data-dir", dataDirPath,
-			"--snapshot-count", fmt.Sprintf("%d", cfg.SnapshotCount),
-		}
-		var clientHttpUrl string
-		if cfg.ClientHttpSeparate {
-			clientHttpUrl = clientURL(clientHttpPort, cfg.ClientTLS)
-			args = append(args, "--listen-client-http-urls", clientHttpUrl)
-		}
-		args = AddV2Args(args)
-		if cfg.ForceNewCluster {
-			args = append(args, "--force-new-cluster")
-		}
-		if cfg.QuotaBackendBytes > 0 {
-			args = append(args,
-				"--quota-backend-bytes", fmt.Sprintf("%d", cfg.QuotaBackendBytes),
-			)
-		}
-		if cfg.NoStrictReconfig {
-			args = append(args, "--strict-reconfig-check=false")
-		}
-		if cfg.EnableV2 {
-			args = append(args, "--enable-v2")
-		}
-		if cfg.InitialCorruptCheck {
-			args = append(args, "--experimental-initial-corrupt-check")
-		}
-		var murl string
-		if cfg.MetricsURLScheme != "" {
-			murl = (&url.URL{
-				Scheme: cfg.MetricsURLScheme,
-				Host:   fmt.Sprintf("localhost:%d", port+2),
-			}).String()
-			args = append(args, "--listen-metrics-urls", murl)
-		}
-
-		args = append(args, cfg.TlsArgs()...)
-
-		if cfg.AuthTokenOpts != "" {
-			args = append(args, "--auth-token", cfg.AuthTokenOpts)
-		}
-
-		if cfg.V2deprecation != "" {
-			args = append(args, "--v2-deprecation", cfg.V2deprecation)
-		}
-
-		if cfg.LogLevel != "" {
-			args = append(args, "--log-level", cfg.LogLevel)
-		}
-
-		if cfg.MaxConcurrentStreams != 0 {
-			args = append(args, "--max-concurrent-streams", fmt.Sprintf("%d", cfg.MaxConcurrentStreams))
-		}
-
-		if cfg.CorruptCheckTime != 0 {
-			args = append(args, "--experimental-corrupt-check-time", fmt.Sprintf("%s", cfg.CorruptCheckTime))
-		}
-		if cfg.CompactHashCheckEnabled {
-			args = append(args, "--experimental-compact-hash-check-enabled")
-		}
-		if cfg.CompactHashCheckTime != 0 {
-			args = append(args, "--experimental-compact-hash-check-time", cfg.CompactHashCheckTime.String())
-		}
-		if cfg.WatchProcessNotifyInterval != 0 {
-			args = append(args, "--experimental-watch-progress-notify-interval", cfg.WatchProcessNotifyInterval.String())
-		}
-		if cfg.CompactionBatchLimit != 0 {
-			args = append(args, "--experimental-compaction-batch-limit", fmt.Sprintf("%d", cfg.CompactionBatchLimit))
-		}
-
-		envVars := map[string]string{}
-		for key, value := range cfg.EnvVars {
-			envVars[key] = value
-		}
-		var gofailPort int
-		if cfg.GoFailEnabled {
-			gofailPort = (i+1)*10000 + 2381
-			envVars["GOFAIL_HTTP"] = fmt.Sprintf("127.0.0.1:%d", gofailPort)
-		}
-
-		etcdCfgs[i] = &EtcdServerProcessConfig{
-			lg:            lg,
-			ExecPath:      cfg.ExecPath,
-			Args:          args,
-			EnvVars:       envVars,
-			TlsArgs:       cfg.TlsArgs(),
-			DataDirPath:   dataDirPath,
-			KeepDataDir:   cfg.KeepDataDir,
-			Name:          name,
-			Purl:          peerAdvertiseUrl,
-			Acurl:         curl,
-			Murl:          murl,
-			InitialToken:  cfg.InitialToken,
-			ClientHttpUrl: clientHttpUrl,
-			GoFailPort:    gofailPort,
-			Proxy:         proxyCfg,
-		}
+		etcdCfgs[i] = cfg.EtcdServerProcessConfig(tb, i)
+		initialCluster[i] = fmt.Sprintf("%s=%s", etcdCfgs[i].Name, etcdCfgs[i].Purl.String())
 	}
 
-	initialClusterArgs := []string{"--initial-cluster", strings.Join(initialCluster, ",")}
 	for i := range etcdCfgs {
-		etcdCfgs[i].InitialCluster = strings.Join(initialCluster, ",")
-		etcdCfgs[i].Args = append(etcdCfgs[i].Args, initialClusterArgs...)
+		cfg.SetInitialCluster(etcdCfgs[i], initialCluster, "")
 	}
 
 	return etcdCfgs
@@ -553,6 +579,10 @@ func (epc *EtcdProcessCluster) Stop() (err error) {
 	return err
 }
 
+func (epc *EtcdProcessCluster) Etcdctl() *Etcdctl {
+	return NewEtcdctl(epc.EndpointsV3(), epc.Cfg.ClientTLS, epc.Cfg.IsClientAutoTLS, epc.Cfg.EnableV2)
+}
+
 func (epc *EtcdProcessCluster) Close() error {
 	epc.lg.Info("closing test cluster...")
 	err := epc.Stop()
@@ -575,4 +605,140 @@ func (epc *EtcdProcessCluster) WithStopSignal(sig os.Signal) (ret os.Signal) {
 		ret = p.WithStopSignal(sig)
 	}
 	return ret
+}
+
+// StartNewProc grows cluster size by one with two phases
+// Phase 1 - Inform cluster of new configuration
+// Phase 2 - Start new member
+func (epc *EtcdProcessCluster) StartNewProc(cfg *EtcdProcessClusterConfig, tb testing.TB) (memberID uint64, err error) {
+	memberID, serverCfg, err := epc.AddMember(cfg, tb)
+	if err != nil {
+		return 0, err
+	}
+
+	// Then start process
+	if err = epc.StartNewProcFromConfig(tb, serverCfg); err != nil {
+		return 0, err
+	}
+
+	return memberID, nil
+}
+
+// AddMember adds a new member to the cluster without starting it.
+func (epc *EtcdProcessCluster) AddMember(cfg *EtcdProcessClusterConfig, tb testing.TB) (memberID uint64, serverCfg *EtcdServerProcessConfig, err error) {
+	if cfg != nil {
+		serverCfg = cfg.EtcdServerProcessConfig(tb, epc.nextSeq)
+	} else {
+		serverCfg = epc.Cfg.EtcdServerProcessConfig(tb, epc.nextSeq)
+	}
+
+	epc.nextSeq++
+
+	initialCluster := []string{
+		fmt.Sprintf("%s=%s", serverCfg.Name, serverCfg.Purl.String()),
+	}
+	for _, p := range epc.Procs {
+		initialCluster = append(initialCluster, fmt.Sprintf("%s=%s", p.Config().Name, p.Config().Purl.String()))
+	}
+
+	epc.Cfg.SetInitialCluster(serverCfg, initialCluster, "existing")
+
+	// First add new member to cluster
+	tb.Logf("add new member to cluster; member-name %s, member-peer-url %s", serverCfg.Name, serverCfg.Purl.String())
+	memberCtl := NewEtcdctl(epc.Procs[0].EndpointsV3(), cfg.ClientTLS, cfg.IsClientAutoTLS, false)
+	resp, err := memberCtl.MemberAdd(serverCfg.Name, []string{serverCfg.Purl.String()})
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to add new member: %w", err)
+	}
+
+	return resp.Member.ID, serverCfg, nil
+}
+
+func (cfg *EtcdProcessClusterConfig) SetInitialCluster(serverCfg *EtcdServerProcessConfig, initialCluster []string, initialClusterState string) {
+	serverCfg.InitialCluster = strings.Join(initialCluster, ",")
+	serverCfg.Args = append(serverCfg.Args, "--initial-cluster", serverCfg.InitialCluster)
+	if len(initialClusterState) > 0 {
+		serverCfg.Args = append(serverCfg.Args, "--initial-cluster-state", initialClusterState)
+	}
+}
+
+// StartNewProcFromConfig starts a new member process from the given config.
+func (epc *EtcdProcessCluster) StartNewProcFromConfig(tb testing.TB, serverCfg *EtcdServerProcessConfig) error {
+	tb.Log("start new member")
+	proc, err := NewEtcdProcess(serverCfg)
+	if err != nil {
+		epc.Close()
+		return fmt.Errorf("cannot configure: %v", err)
+	}
+
+	epc.Procs = append(epc.Procs, proc)
+
+	return proc.Start()
+}
+
+// WaitLeader returns index of the member in c.Members() that is leader
+// or fails the test (if not established in 30s).
+func (epc *EtcdProcessCluster) WaitLeader(t testing.TB) int {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return epc.WaitMembersForLeader(ctx, t, epc.Procs)
+}
+
+// WaitMembersForLeader waits until given members agree on the same leader,
+// and returns its 'index' in the 'membs' list
+func (epc *EtcdProcessCluster) WaitMembersForLeader(ctx context.Context, t testing.TB, membs []EtcdProcess) int {
+	cc := epc.Etcdctl()
+
+	// ensure leader is up via linearizable get
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal("WaitMembersForLeader timeout")
+		default:
+		}
+		_, err := cc.Get("0")
+		if err == nil || strings.Contains(err.Error(), "Key not found") {
+			break
+		}
+		t.Logf("WaitMembersForLeader Get err: %v", err)
+	}
+
+	leaders := make(map[uint64]struct{})
+	members := make(map[uint64]int)
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal("WaitMembersForLeader timeout")
+		default:
+		}
+		for i := range membs {
+			resp, err := membs[i].Etcdctl().Status()
+			if err != nil {
+				if strings.Contains(err.Error(), "connection refused") {
+					// if member[i] has stopped
+					continue
+				} else {
+					t.Fatal(err)
+				}
+			}
+			members[resp[0].Header.MemberId] = i
+			leaders[resp[0].Leader] = struct{}{}
+		}
+		// members agree on the same leader
+		if len(leaders) == 1 {
+			break
+		}
+		leaders = make(map[uint64]struct{})
+		members = make(map[uint64]int)
+		time.Sleep(10 * TickDuration)
+	}
+	for l := range leaders {
+		if index, ok := members[l]; ok {
+			t.Logf("members agree on a leader, members:%v , leader:%v", members, l)
+			return index
+		}
+		t.Fatalf("members agree on a leader which is not one of members, members:%v , leader:%v", members, l)
+	}
+	t.Fatal("impossible path of execution")
+	return -1
 }
