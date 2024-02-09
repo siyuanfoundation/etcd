@@ -1,0 +1,19 @@
+ARG ARCH=amd64
+FROM --platform=linux/${ARCH} debian
+
+ADD bin/etcd /usr/local/bin/
+ADD bin/etcdctl /usr/local/bin/
+ADD bin/etcdutl /usr/local/bin/
+ADD bin/tools/benchmark /usr/local/bin/
+
+WORKDIR /var/etcd/
+WORKDIR /var/lib/etcd/
+
+COPY scripts/eetcd_benchmark.sh ./eetcd_benchmark.sh
+
+EXPOSE 2379 2380
+
+RUN apt-get -y update; apt-get -y install curl
+
+# Define default command.
+CMD ["./eetcd_benchmark.sh", "--backend-type=bolt", "--docker", "--n=8", "--total-keys=1000000"]
