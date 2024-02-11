@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"runtime"
 	"sync"
 	"time"
 
@@ -357,6 +358,7 @@ func (s *store) restore() error {
 		min = RevToBytes(newMin, min)
 	}
 	close(rkvc)
+	runtime.GC()
 
 	{
 		s.revMu.Lock()
@@ -463,12 +465,20 @@ func restoreIntoIndex(lg *zap.Logger, idx index) (chan<- revKeyValue, <-chan int
 
 func restoreChunk(lg *zap.Logger, kvc chan<- revKeyValue, keys, vals [][]byte, keyToLease map[string]lease.LeaseID) {
 	for i, key := range keys {
-		rkv := revKeyValue{key: key}
-		if err := rkv.kv.Unmarshal(vals[i]); err != nil {
+		newKey := make([]byte, len(key))
+		copy(newKey, key)
+		rkv := revKeyValue{key: newKey}
+		kv := mvccpb.KeyValue{}
+		if err := kv.Unmarshal(vals[i]); err != nil {
 			lg.Fatal("failed to unmarshal mvccpb.KeyValue", zap.Error(err))
 		}
-		rkv.kv.Value = nil
+		rkv.kv.Key = make([]byte, len(kv.Key))
+		copy(rkv.kv.Key, kv.Key)
 		rkv.kstr = string(rkv.kv.Key)
+		rkv.kv.CreateRevision = kv.CreateRevision
+		rkv.kv.ModRevision = kv.ModRevision
+		rkv.kv.Version = kv.Version
+		rkv.kv.Lease = kv.Lease
 		if isTombstone(key) {
 			delete(keyToLease, rkv.kstr)
 		} else if lid := lease.LeaseID(rkv.kv.Lease); lid != lease.NoLease {
