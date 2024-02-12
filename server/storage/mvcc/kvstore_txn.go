@@ -228,8 +228,24 @@ func (tw *storeTxnWrite) put(key, value []byte, leaseID lease.LeaseID) {
 		)
 	}
 
+	kvKey := mvccpb.KeyValue{
+		Key:            key,
+		CreateRevision: c,
+		ModRevision:    rev,
+		Version:        ver,
+		Lease:          int64(leaseID),
+	}
+
+	dKey, err := kvKey.Marshal()
+	if err != nil {
+		tw.storeTxnCommon.s.lg.Fatal(
+			"failed to marshal mvccpb.KeyValue",
+			zap.Error(err),
+		)
+	}
+
 	tw.trace.Step("marshal mvccpb.KeyValue")
-	tw.tx.UnsafeSeqPut(bucket.Key, ibytes, d)
+	tw.tx.UnsafeSeqPut(bucket.Key, ibytes, dKey, d)
 	tw.s.kvindex.Put(key, idxRev)
 	tw.changes = append(tw.changes, kv)
 	tw.trace.Step("store kv pair into bolt db")
@@ -293,7 +309,7 @@ func (tw *storeTxnWrite) delete(key []byte) {
 		)
 	}
 
-	tw.tx.UnsafeSeqPut(bucket.Key, ibytes, d)
+	tw.tx.UnsafeSeqPut(bucket.Key, ibytes, d, d)
 	err = tw.s.kvindex.Tombstone(key, idxRev.Revision)
 	if err != nil {
 		tw.storeTxnCommon.s.lg.Fatal(

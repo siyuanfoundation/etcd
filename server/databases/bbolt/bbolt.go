@@ -397,6 +397,10 @@ func (b *BBoltBucket) Writable() bool {
 	return b.bucket.Writable()
 }
 
+func (b *BBoltBucket) UnsafeRangeKeys(key, endKey []byte, limit int64) (keys [][]byte, keyValueKeys [][]byte, implemented bool) {
+	return nil, nil, false
+}
+
 func (b *BBoltBucket) UnsafeRange(key, endKey []byte, limit int64) (keys [][]byte, vs [][]byte) {
 	c := b.bucket.Cursor()
 	if limit <= 0 {
@@ -454,7 +458,7 @@ func (b *BBoltBucket) Get(key []byte) []byte {
 	return b.bucket.Get(key)
 }
 
-func (b *BBoltBucket) Put(key []byte, value []byte) error {
+func (b *BBoltBucket) Put(key []byte, keyValueKey []byte, value []byte) error {
 	return b.bucket.Put(key, value)
 }
 

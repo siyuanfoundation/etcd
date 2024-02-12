@@ -47,7 +47,7 @@ type UnsafeWriter interface {
 	UnsafeCreateBucket(bucket bucket.Bucket)
 	UnsafeDeleteBucket(bucket bucket.Bucket)
 	UnsafePut(bucket bucket.Bucket, key []byte, value []byte)
-	UnsafeSeqPut(bucket bucket.Bucket, key []byte, value []byte)
+	UnsafeSeqPut(bucket bucket.Bucket, key []byte, keyValueKey []byte, value []byte)
 	UnsafeDelete(bucket bucket.Bucket, key []byte)
 }
 
@@ -120,15 +120,15 @@ func (t *batchTx) UnsafeDeleteBucket(bucket bucket.Bucket) {
 
 // UnsafePut must be called holding the lock on the tx.
 func (t *batchTx) UnsafePut(bucket bucket.Bucket, key []byte, value []byte) {
-	t.unsafePut(bucket, key, value, false)
+	t.unsafePut(bucket, key, key, value, false)
 }
 
 // UnsafeSeqPut must be called holding the lock on the tx.
-func (t *batchTx) UnsafeSeqPut(bucket bucket.Bucket, key []byte, value []byte) {
-	t.unsafePut(bucket, key, value, true)
+func (t *batchTx) UnsafeSeqPut(bucket bucket.Bucket, key []byte, keyValueKey []byte, value []byte) {
+	t.unsafePut(bucket, key, keyValueKey, value, true)
 }
 
-func (t *batchTx) unsafePut(bucketType bucket.Bucket, key []byte, value []byte, seq bool) {
+func (t *batchTx) unsafePut(bucketType bucket.Bucket, key []byte, keyValueKey []byte, value []byte, seq bool) {
 	bucket := t.tx.Bucket(bucketType.Name())
 	if bucket == nil {
 		t.backend.lg.Fatal(
@@ -142,7 +142,7 @@ func (t *batchTx) unsafePut(bucketType bucket.Bucket, key []byte, value []byte, 
 		// this can delay the page split and reduce space usage.
 		bucket.SetFillPercent(0.9)
 	}
-	if err := bucket.Put(key, value); err != nil {
+	if err := bucket.Put(key, keyValueKey, value); err != nil {
 		t.backend.lg.Fatal(
 			"failed to write to a bucket",
 			zap.Stringer("bucket-name", bucketType),
@@ -163,6 +163,18 @@ func (t *batchTx) UnsafeRange(bucketType bucket.Bucket, key, endKey []byte, limi
 		)
 	}
 	return bucket.UnsafeRange(key, endKey, limit)
+}
+
+func (t *batchTx) UnsafeRangeKeys(bucketType bucket.Bucket, key, endKey []byte, limit int64) ([][]byte, [][]byte, bool) {
+	bucket := t.tx.Bucket(bucketType.Name())
+	if bucket == nil {
+		t.backend.lg.Fatal(
+			"failed to find a bucket",
+			zap.Stringer("bucket-name", bucketType),
+			zap.Stack("stack"),
+		)
+	}
+	return bucket.UnsafeRangeKeys(key, endKey, limit)
 }
 
 // UnsafeDelete must be called holding the lock on the tx.
@@ -325,7 +337,7 @@ func (t *batchTxBuffered) UnsafePut(bucket bucket.Bucket, key []byte, value []by
 	t.buf.put(bucket, key, value)
 }
 
-func (t *batchTxBuffered) UnsafeSeqPut(bucket bucket.Bucket, key []byte, value []byte) {
-	t.batchTx.UnsafeSeqPut(bucket, key, value)
+func (t *batchTxBuffered) UnsafeSeqPut(bucket bucket.Bucket, key []byte, keyValueKey []byte, value []byte) {
+	t.batchTx.UnsafeSeqPut(bucket, key, keyValueKey, value)
 	t.buf.putSeq(bucket, key, value)
 }

@@ -944,13 +944,16 @@ func (b *fakeBatchTx) UnsafeDeleteBucket(bucket bucket.Bucket) {}
 func (b *fakeBatchTx) UnsafePut(bucket bucket.Bucket, key []byte, value []byte) {
 	b.Recorder.Record(testutil.Action{Name: "put", Params: []any{bucket, key, value}})
 }
-func (b *fakeBatchTx) UnsafeSeqPut(bucket bucket.Bucket, key []byte, value []byte) {
+func (b *fakeBatchTx) UnsafeSeqPut(bucket bucket.Bucket, key []byte, keyValueKey []byte, value []byte) {
 	b.Recorder.Record(testutil.Action{Name: "seqput", Params: []any{bucket, key, value}})
 }
 func (b *fakeBatchTx) UnsafeRange(bucket bucket.Bucket, key, endKey []byte, limit int64) (keys [][]byte, vals [][]byte) {
 	b.Recorder.Record(testutil.Action{Name: "range", Params: []any{bucket, key, endKey, limit}})
 	r := <-b.rangeRespc
 	return r.keys, r.vals
+}
+func (b *fakeBatchTx) UnsafeRangeKeys(bucket bucket.Bucket, key, endKey []byte, limit int64) ([][]byte, [][]byte, bool) {
+	return nil, nil, false
 }
 func (b *fakeBatchTx) UnsafeDelete(bucket bucket.Bucket, key []byte) {
 	b.Recorder.Record(testutil.Action{Name: "delete", Params: []any{bucket, key}})

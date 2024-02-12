@@ -66,8 +66,9 @@ type Bucket interface {
 	Tx() Tx
 	Writable() bool
 	Get(key []byte) []byte
-	Put(key []byte, value []byte) error
+	Put(key []byte, keyValueKey []byte, value []byte) error
 	UnsafeRange(key, endKey []byte, limit int64) (keys [][]byte, vs [][]byte)
+	UnsafeRangeKeys(key, endKey []byte, limit int64) (keys [][]byte, keyValueKeys [][]byte, implemented bool)
 	Delete(key []byte) error
 	ForEach(func(k []byte, v []byte) error) error
 	Stats() interface{}

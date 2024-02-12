@@ -34,6 +34,7 @@ type ReadTx interface {
 
 type UnsafeReader interface {
 	UnsafeRange(bucket bucket.Bucket, key, endKey []byte, limit int64) (keys [][]byte, vals [][]byte)
+	UnsafeRangeKeys(bucket bucket.Bucket, key, endKey []byte, limit int64) (keys [][]byte, kvKeys [][]byte, implemented bool)
 	UnsafeForEach(bucket bucket.Bucket, visitor func(k, v []byte) error) error
 }
 
@@ -119,6 +120,46 @@ func (baseReadTx *baseReadTx) UnsafeRange(bucketType bucket.Bucket, key, endKey 
 
 	k2, v2 := bucket.UnsafeRange(key, endKey, limit-int64(len(keys)))
 	return append(k2, keys...), append(v2, vals...)
+}
+
+func (baseReadTx *baseReadTx) UnsafeRangeKeys(bucketType bucket.Bucket, key, endKey []byte, limit int64) (keys [][]byte, kvKeys [][]byte, implemented bool) {
+	if endKey == nil {
+		// forbid duplicates for single keys
+		limit = 1
+	}
+	if limit <= 0 {
+		limit = math.MaxInt64
+	}
+	if limit > 1 && !bucketType.IsSafeRangeBucket() {
+		panic("do not use unsafeRange on non-keys bucket")
+	}
+
+	// find/cache bucket
+	bn := bucketType.ID()
+	baseReadTx.txMu.RLock()
+	bucket, ok := baseReadTx.buckets[bn]
+	baseReadTx.txMu.RUnlock()
+	lockHeld := false
+	if !ok {
+		baseReadTx.txMu.Lock()
+		lockHeld = true
+		bucket = baseReadTx.tx.Bucket(bucketType.Name())
+		baseReadTx.buckets[bn] = bucket
+	}
+
+	// ignore missing bucket since may have been created in this batch
+	if bucket == nil {
+		if lockHeld {
+			baseReadTx.txMu.Unlock()
+		}
+		return keys, kvKeys, false
+	}
+	if !lockHeld {
+		baseReadTx.txMu.Lock()
+	}
+	baseReadTx.txMu.Unlock()
+
+	return bucket.UnsafeRangeKeys(key, endKey, limit-int64(len(keys)))
 }
 
 type readTx struct {

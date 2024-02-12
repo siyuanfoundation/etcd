@@ -42,19 +42,21 @@ const (
 	hasBucketQuery          = `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`
 	queryTableNames         = `SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name;`
 	dropBucketQuery         = `DROP TABLE IF EXISTS ?;`
-	createBucketQuery       = "CREATE TABLE IF NOT EXISTS %s (key STRING PRIMARY KEY, value BLOB);"
+	createBucketQuery       = "CREATE TABLE IF NOT EXISTS %s (key STRING PRIMARY KEY, kvKey BLOB, value BLOB);"
 	genericUnsafeRangeQuery = "select key, value from %s WHERE key >= ? AND key <= ? ORDER BY key limit ?;"
 	// genericUnsafeRangeQuery      = "select key, value from %s WHERE key >= ? AND key <= ? limit ?;"
 	genericUnsafeRangeQueryNoEnd = "select key, value from %s WHERE key >= ? ORDER BY key limit ?;"
 	genericGet                   = "SELECT value from %s WHERE key=?;"
-	genericUpsert                = "INSERT INTO %s (key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value;"
-	genericDelete                = "DELETE from %s where key = ?;"
-	genericForEach               = "select key, value from %s;"
+
+	genericUnsafeRangeKeyQuery      = "select key, kvKey from %s WHERE key >= ? AND key <= ? ORDER BY key limit ?;"
+	genericUnsafeRangeKeyQueryNoEnd = "select key, kvKey from %s WHERE key >= ? ORDER BY key limit ?;"
+	genericGetKey                   = "SELECT kvKey from %s WHERE key=?;"
+	genericUpsert                   = "INSERT INTO %s (key, kvKey, value) VALUES(?, ?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value;"
+	genericDelete                   = "DELETE from %s where key = ?;"
+	genericForEach                  = "select key, value from %s;"
 
 	sizeQuery     = `SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();`
 	defragCommand = `VACUUM;`
-	UpsertKV      = `INSERT INTO KVs (key, value)
-  VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value;`
 
 	dbName = "db"
 )
@@ -126,7 +128,7 @@ func NewSqliteDB[B BackendBucket](dir string, buckets ...B) (*SqliteDB, error) {
 	db.Exec("PRAGMA hard_heap_limit = 67108864") // 64M
 	for _, b := range buckets {
 		tn := resolveTableName(string(b.Name()))
-		createTableQuery := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (key STRING PRIMARY KEY, value BLOB );", tn)
+		createTableQuery := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (key STRING PRIMARY KEY, kvKey BLOB, value BLOB );", tn)
 		_, err = db.Exec(createTableQuery)
 	}
 
@@ -480,13 +482,63 @@ func (s *SqliteBucket) Get(key []byte) []byte {
 	return val
 }
 
-func (s *SqliteBucket) Put(key []byte, value []byte) error {
+func (s *SqliteBucket) Put(key []byte, keyValueKey []byte, value []byte) error {
 	query := fmt.Sprintf(genericUpsert, s.name)
-	_, err := s.TX.Exec(query, string(key), value)
+	_, err := s.TX.Exec(query, string(key), keyValueKey, value)
 	if err != nil {
-		fmt.Printf("sizhang: SqliteBucket.put error: %s\n", err)
+		fmt.Printf("sizhangDebug: SqliteBucket.put error: %s\n", err)
 	}
 	return err
+}
+
+func (s *SqliteBucket) UnsafeRangeKeys(key, endKey []byte, limit int64) (keys [][]byte, keyValueKeys [][]byte, implemented bool) {
+	fmt.Printf("sizhangDebug: SqliteBucket.UnsafeRangeKeys\n")
+	// return nil, nil, false
+	if endKey == nil || limit == 0 || limit == 1 {
+		query := fmt.Sprintf(genericGetKey, s.name)
+		r, err := s.TX.Query(query, string(key))
+		if err != nil {
+			return keys, keyValueKeys, true
+		}
+		defer r.Close()
+
+		if r.Next() {
+			var val []byte
+			r.Scan(&val)
+			keys = append(keys, key)
+			keyValueKeys = append(keyValueKeys, val)
+		}
+		return keys, keyValueKeys, true
+	}
+	var query string
+	var r *sql.Rows
+	var err error
+	if endKey == nil {
+		query = fmt.Sprintf(genericUnsafeRangeKeyQueryNoEnd, s.name)
+		r, err = s.TX.Query(query, string(key), limit)
+	} else {
+		query := fmt.Sprintf(genericUnsafeRangeKeyQuery, s.name)
+		r, err = s.TX.Query(query, string(key), string(endKey), limit)
+	}
+
+	if err != nil {
+		return nil, nil, false
+	}
+	defer r.Close()
+	names := make([][]byte, 0)
+	values := make([][]byte, 0)
+	for r.Next() {
+		var key string
+		var v []byte
+		if err := r.Scan(&key, &v); err != nil {
+			// Check for a scan error.
+			// Query rows will be closed with defer.
+			log.Fatal(err)
+		}
+		names = append(names, []byte(key))
+		values = append(values, v)
+	}
+	return names, values, true
 }
 
 func (s *SqliteBucket) UnsafeRange(key, endKey []byte, limit int64) (keys [][]byte, vs [][]byte) {
