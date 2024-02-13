@@ -53,8 +53,7 @@ const (
 
 	sizeQuery     = `SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();`
 	defragCommand = `VACUUM;`
-	UpsertKV      = `INSERT INTO KVs (key, value)
-  VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value;`
+	InsertKV      = `INSERT INTO KVs (key, value) VALUES(?, ?);`
 
 	dbName = "db"
 )
@@ -119,11 +118,14 @@ func NewSqliteDB[B BackendBucket](dir string, buckets ...B) (*SqliteDB, error) {
 	if err = db.Ping(); err != nil {
 		return nil, err
 	}
-	db.Exec("PRAGMA mmap_size=0;")
-	db.Exec("PRAGMA temp_store = file;")
-	db.Exec("PRAGMA page_size = 1024;")
-	db.Exec("PRAGMA cache_size = 100")
-	db.Exec("PRAGMA hard_heap_limit = 67108864") // 64M
+	db.Exec("PRAGMA journal_mode = WAL;")
+	db.Exec("PRAGMA synchronous = normal;")
+
+	// db.Exec("PRAGMA mmap_size=0;")
+	// db.Exec("PRAGMA temp_store = file;")
+	// db.Exec("PRAGMA page_size = 1024;")
+	// db.Exec("PRAGMA cache_size = 100")
+	// db.Exec("PRAGMA hard_heap_limit = 67108864") // 64M
 	for _, b := range buckets {
 		tn := resolveTableName(string(b.Name()))
 		createTableQuery := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (key STRING PRIMARY KEY, value BLOB );", tn)
@@ -481,7 +483,12 @@ func (s *SqliteBucket) Get(key []byte) []byte {
 }
 
 func (s *SqliteBucket) Put(key []byte, value []byte) error {
-	query := fmt.Sprintf(genericUpsert, s.name)
+	var query string
+	if s.name == "KVs" {
+		query = InsertKV
+	} else {
+		query = fmt.Sprintf(genericUpsert, s.name)
+	}
 	_, err := s.TX.Exec(query, string(key), value)
 	if err != nil {
 		fmt.Printf("sizhang: SqliteBucket.put error: %s\n", err)
