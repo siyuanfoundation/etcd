@@ -77,13 +77,13 @@ check_health
 
 for ((i = 1; i <= n; i++ )); do
   echo "running benchmark iteration: ${i}"
-  sleep 5
-  # collect cpu profile while writing into the db
-  curl http://127.0.0.1:2379/debug/pprof/profile?seconds=30 > "${outputDir}/${backendType}_cpu_iter_${i}.pprof" &
-  $benchmarkBin put --total=${totalKeys} --key-size=128 --val-size=1024 --key-space-size=100000000 > "${outputDir}/${backendType}_put_benchmark_results_iter_${i}.log"
-  # collect memory profile
   sleep 60
-  curl http://127.0.0.1:2379/debug/pprof/heap > "${outputDir}/${backendType}_mem_iter_${i}.pprof"
+  # collect cpu profile while writing into the db
+  curl http://127.0.0.1:2379/debug/pprof/profile?seconds=60 > "${outputDir}/${backendType}_put_cpu_iter_${i}.pprof" &
+  $benchmarkBin put --total=${totalKeys} --conns=16 --clients=16 --key-size=128 --val-size=1024 --key-space-size=100000000 > "${outputDir}/${backendType}_put_benchmark_results_iter_${i}.log"
+  # collect memory profile
+  sleep 10
+  curl http://127.0.0.1:2379/debug/pprof/heap > "${outputDir}/${backendType}_mem_after_put_iter_${i}.pprof"
   # restart etcd and collect restore time and mem profile
   kill $serverPID
   wait
@@ -98,8 +98,20 @@ for ((i = 1; i <= n; i++ )); do
   echo "Time to restore etcd: $(($end-$start)) seconds" | tee "${outputDir}/time_to_restore_iter_${i}"
 
   curl http://127.0.0.1:2379/debug/pprof/heap > "${outputDir}/${backendType}_restart_mem_iter_${i}.pprof"
+  
+  sleep 60
+  # collect cpu profile while running range
+  rangeTotal=$((550-50*i))
+  rangeTotal=$(( rangeTotal > 10 ? rangeTotal : 10 ))
+  curl http://127.0.0.1:2379/debug/pprof/profile?seconds=60 > "${outputDir}/${backendType}_range_cpu_iter_${i}.pprof" &
+  $benchmarkBin range aa ab --total=${rangeTotal} --conns=16 --clients=16 > "${outputDir}/${backendType}_range_benchmark_results_iter_${i}.log"
+  # collect memory profile after range
+  sleep 10
+  curl http://127.0.0.1:2379/debug/pprof/heap > "${outputDir}/${backendType}_mem_after_range_iter_${i}.pprof"
+  
 done
 
+echo "Current date and time: $(date)"
 echo "Finished benchmarking, check results in in ${outputDir}"
 jobs
-fg %$((2*$n+1))
+fg %$((3*$n+0))

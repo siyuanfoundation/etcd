@@ -85,7 +85,7 @@ func rangeFunc(cmd *cobra.Command, args []string) {
 
 	bar = pb.New(rangeTotal)
 	bar.Start()
-
+	kvCount := 0
 	r := newReport()
 	for i := range clients {
 		wg.Add(1)
@@ -95,7 +95,10 @@ func rangeFunc(cmd *cobra.Command, args []string) {
 				limit.Wait(context.Background())
 
 				st := time.Now()
-				_, err := c.Do(context.Background(), op)
+				resp, err := c.Do(context.Background(), op)
+				if kvCount == 0 {
+					kvCount = int(resp.Get().Count)
+				}
 				r.Results() <- report.Result{Err: err, Start: st, End: time.Now()}
 				bar.Increment()
 			}
@@ -122,4 +125,5 @@ func rangeFunc(cmd *cobra.Command, args []string) {
 	close(r.Results())
 	bar.Finish()
 	fmt.Printf("%s", <-rc)
+	fmt.Printf("len(KVs) = %d\n", kvCount)
 }
