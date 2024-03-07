@@ -190,6 +190,7 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 		BackendBatchLimit:                        cfg.BackendBatchLimit,
 		BackendFreelistType:                      cfg.BackendFreelistType,
 		BackendType:                              cfg.ExperimentalBackendType,
+		ExperimentalPersistIndex:                 cfg.ExperimentalPersistIndex,
 		BackendBatchInterval:                     cfg.BackendBatchInterval,
 		MaxTxnOps:                                cfg.MaxTxnOps,
 		MaxRequestBytes:                          cfg.MaxRequestBytes,
@@ -371,6 +372,7 @@ func print(lg *zap.Logger, ec Config, sc config.ServerConfig, memberInitialized 
 		zap.String("downgrade-check-interval", sc.DowngradeCheckTime.String()),
 		zap.Int("max-learners", sc.ExperimentalMaxLearners),
 		zap.String("backend-type", sc.ExperimentalBackendType),
+		zap.Bool("persist-index", sc.ExperimentalPersistIndex),
 	)
 }
 

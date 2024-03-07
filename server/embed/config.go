@@ -386,7 +386,8 @@ type Config struct {
 	ExperimentalDistributedTracingSamplingRatePerMillion int `json:"experimental-distributed-tracing-sampling-rate"`
 
 	// ExperimentalBackendType allows you to set the underlying database to sqlite.
-	ExperimentalBackendType string `json:"experimental-backend-type"`
+	ExperimentalBackendType  string `json:"experimental-backend-type"`
+	ExperimentalPersistIndex bool   `json:"experimental-persist-index"`
 
 	// Logger is logger options: currently only supports "zap".
 	// "capnslog" is removed in v3.5.
@@ -751,6 +752,7 @@ func (cfg *Config) AddFlags(fs *flag.FlagSet) {
 	fs.IntVar(&cfg.ExperimentalMaxLearners, "experimental-max-learners", membership.DefaultMaxLearners, "Sets the maximum number of learners that can be available in the cluster membership.")
 	fs.Uint64Var(&cfg.SnapshotCatchUpEntries, "experimental-snapshot-catchup-entries", cfg.SnapshotCatchUpEntries, "Number of entries for a slow follower to catch up after compacting the raft storage entries.")
 	fs.StringVar(&cfg.ExperimentalBackendType, "experimental-backend-type", DefaultBackendType, "Sets the backend type: bolt or sqlite.")
+	fs.BoolVar(&cfg.ExperimentalPersistIndex, "experimental-persist-index", false, "Sets the backend type: bolt or sqlite.")
 
 	// unsafe
 	fs.BoolVar(&cfg.UnsafeNoFsync, "unsafe-no-fsync", false, "Disables fsync, unsafe, will cause data loss.")

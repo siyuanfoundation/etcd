@@ -140,8 +140,9 @@ type storeTxnWrite struct {
 	storeTxnCommon
 	tx backend.BatchTx
 	// beginRev is the revision where the txn begins; it will write to the next revision.
-	beginRev int64
-	changes  []mvccpb.KeyValue
+	beginRev     int64
+	changes      []mvccpb.KeyValue
+	persistIndex bool
 }
 
 func (s *store) Write(trace *traceutil.Trace) TxnWrite {
@@ -153,6 +154,7 @@ func (s *store) Write(trace *traceutil.Trace) TxnWrite {
 		tx:             tx,
 		beginRev:       s.currentRev,
 		changes:        make([]mvccpb.KeyValue, 0, 4),
+		persistIndex:   s.cfg.PersistIndex,
 	}
 	return newMetricsTxnWrite(tw)
 }
@@ -231,6 +233,24 @@ func (tw *storeTxnWrite) put(key, value []byte, leaseID lease.LeaseID) {
 	tw.trace.Step("marshal mvccpb.KeyValue")
 	tw.tx.UnsafeSeqPut(bucket.Key, ibytes, d)
 	tw.s.kvindex.Put(key, idxRev)
+	if tw.persistIndex {
+		kvKey := mvccpb.KeyValue{
+			Key:            key,
+			CreateRevision: c,
+			ModRevision:    rev,
+			Version:        ver,
+			Lease:          int64(leaseID),
+		}
+
+		dKey, err := kvKey.Marshal()
+		if err != nil {
+			tw.storeTxnCommon.s.lg.Fatal(
+				"failed to marshal mvccpb.KeyValue",
+				zap.Error(err),
+			)
+		}
+		tw.tx.UnsafeSeqPut(bucket.KeyIndex, ibytes, dKey)
+	}
 	tw.changes = append(tw.changes, kv)
 	tw.trace.Step("store kv pair into bolt db")
 
@@ -294,6 +314,9 @@ func (tw *storeTxnWrite) delete(key []byte) {
 	}
 
 	tw.tx.UnsafeSeqPut(bucket.Key, ibytes, d)
+	if tw.persistIndex {
+		tw.tx.UnsafeSeqPut(bucket.KeyIndex, ibytes, d)
+	}
 	err = tw.s.kvindex.Tombstone(key, idxRev.Revision)
 	if err != nil {
 		tw.storeTxnCommon.s.lg.Fatal(

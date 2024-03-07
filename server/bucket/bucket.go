@@ -35,7 +35,8 @@ var (
 	authUsersBucketName = []byte("authUsers")
 	authRolesBucketName = []byte("authRoles")
 
-	testBucketName = []byte("test")
+	testBucketName     = []byte("test")
+	keyIndexBucketName = []byte("kindex")
 )
 
 type BucketID int
@@ -69,7 +70,8 @@ var (
 	AuthUsers = Bucket(bucket{id: 21, name: authUsersBucketName, safeRangeBucket: false})
 	AuthRoles = Bucket(bucket{id: 22, name: authRolesBucketName, safeRangeBucket: false})
 
-	Test = Bucket(bucket{id: 100, name: testBucketName, safeRangeBucket: false})
+	Test     = Bucket(bucket{id: 100, name: testBucketName, safeRangeBucket: false})
+	KeyIndex = Bucket(bucket{id: 101, name: keyIndexBucketName, safeRangeBucket: true})
 
 	Buckets = []Bucket{Key, Meta, Lease, Alarm, Cluster, Members, MembersRemoved, Auth, AuthUsers, AuthRoles, Test}
 )

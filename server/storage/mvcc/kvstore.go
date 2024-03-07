@@ -45,6 +45,7 @@ var minimumBatchInterval = 10 * time.Millisecond
 type StoreConfig struct {
 	CompactionBatchLimit    int
 	CompactionSleepInterval time.Duration
+	PersistIndex            bool
 }
 
 type store struct {
@@ -116,6 +117,7 @@ func NewStore(lg *zap.Logger, b backend.Backend, le lease.Lessor, cfg StoreConfi
 	tx := s.b.BatchTx()
 	tx.LockOutsideApply()
 	tx.UnsafeCreateBucket(bucket.Key)
+	tx.UnsafeCreateBucket(bucket.KeyIndex)
 	schema.UnsafeCreateMetaBucket(tx)
 	tx.Unlock()
 	s.b.ForceCommit()
@@ -339,7 +341,14 @@ func (s *store) restore() error {
 	keysGauge.Set(0)
 	rkvc, revc := restoreIntoIndex(s.lg, s.kvindex)
 	for {
-		keys, vals := tx.UnsafeRange(bucket.Key, min, max, int64(restoreChunkKeys))
+		var keys [][]byte
+		var vals [][]byte
+		if s.cfg.PersistIndex {
+			s.lg.Info("restore from persisted index")
+			keys, vals = tx.UnsafeRange(bucket.KeyIndex, min, max, int64(restoreChunkKeys))
+		} else {
+			keys, vals = tx.UnsafeRange(bucket.Key, min, max, int64(restoreChunkKeys))
+		}
 		if len(keys) == 0 {
 			break
 		}

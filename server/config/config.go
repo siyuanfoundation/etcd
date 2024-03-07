@@ -40,6 +40,7 @@ type ServerConfig struct {
 	DiscoveryProxy string
 	DiscoveryCfg   v3discovery.DiscoveryConfig
 
+	// BackendType sets the backend type.
 	BackendType string
 
 	ClientURLs types.URLs
@@ -204,7 +205,8 @@ type ServerConfig struct {
 	ExperimentalMaxLearners int `json:"experimental-max-learners"`
 
 	// ExperimentalBackendType sets the backend type.
-	ExperimentalBackendType string `json:"experimental-backend-type"`
+	ExperimentalBackendType  string `json:"experimental-backend-type"`
+	ExperimentalPersistIndex bool   `json:"experimental-persist-index"`
 
 	// V2Deprecation defines a phase of v2store deprecation process.
 	V2Deprecation V2DeprecationEnum `json:"v2-deprecation"`
