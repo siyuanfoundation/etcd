@@ -65,6 +65,11 @@ type SqliteDB struct {
 	FreeListType string // no-opts
 }
 
+func (s *SqliteDB) RunGC(f float64) error {
+	//noop
+	return nil
+}
+
 type BackendBucket interface {
 	Name() []byte
 }
