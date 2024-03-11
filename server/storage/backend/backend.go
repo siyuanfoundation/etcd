@@ -25,6 +25,7 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 	"go.etcd.io/etcd/server/v3/bucket"
+	"go.etcd.io/etcd/server/v3/databases/badger"
 	"go.etcd.io/etcd/server/v3/databases/bbolt"
 	"go.etcd.io/etcd/server/v3/databases/sqlite"
 	"go.etcd.io/etcd/server/v3/interfaces"
@@ -175,6 +176,9 @@ func New(bcfg BackendConfig) Backend {
 	if bcfg.BackendType == "" || bcfg.BackendType == "bolt" {
 		return newBoltBackend(bcfg)
 	}
+	if bcfg.BackendType == "badger" {
+		return newBadgerBackend(bcfg)
+	}
 	return newSqliteBackend(bcfg)
 }
 
@@ -235,6 +239,54 @@ func newSqliteBackend(bcfg BackendConfig) *backend {
 	b.hooks = bcfg.Hooks
 
 	go b.run()
+	return b
+}
+
+func newBadgerBackend(bcfg BackendConfig) *backend {
+
+	db, err := badger.Open(bcfg.Path)
+	if err != nil {
+		bcfg.Logger.Panic("failed to open database", zap.String("path", bcfg.Path), zap.Error(err))
+	}
+
+	// In future, may want to make buffering optional for low-concurrency systems
+	// or dynamically swap between buffered/non-buffered depending on workload.
+	b := &backend{
+		db: db,
+
+		batchInterval: bcfg.BatchInterval,
+		batchLimit:    bcfg.BatchLimit,
+		mlock:         bcfg.Mlock,
+
+		readTx: &readTx{
+			baseReadTx: baseReadTx{
+				buf: txReadBuffer{
+					txBuffer:   txBuffer{make(map[bucket.BucketID]*bucketBuffer)},
+					bufVersion: 0,
+				},
+				buckets: make(map[bucket.BucketID]interfaces.Bucket),
+				txWg:    new(sync.WaitGroup),
+				txMu:    new(sync.RWMutex),
+			},
+		},
+		txReadBufferCache: txReadBufferCache{
+			mu:         sync.Mutex{},
+			bufVersion: 0,
+			buf:        nil,
+		},
+
+		stopc: make(chan struct{}),
+		donec: make(chan struct{}),
+
+		lg: bcfg.Logger,
+	}
+
+	b.batchTx = newBatchTxBuffered(b)
+	// We set it after newBatchTxBuffered to skip the 'empty' commit.
+	b.hooks = bcfg.Hooks
+
+	go b.run()
+	go b.runGC()
 	return b
 }
 
@@ -474,6 +526,18 @@ func (b *backend) run() {
 			b.batchTx.Commit()
 		}
 		t.Reset(b.batchInterval)
+	}
+}
+
+func (b *backend) runGC() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+	again:
+		err := b.db.RunGC(0.5)
+		if err == nil {
+			goto again
+		}
 	}
 }
 

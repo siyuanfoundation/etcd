@@ -68,6 +68,11 @@ type BBoltDB struct {
 	db *bolt.DB
 }
 
+func (b *BBoltDB) RunGC(discardRatio float64) error {
+	//noop
+	return nil
+}
+
 func (b *BBoltDB) Path() string {
 	return b.db.Path()
 }

@@ -367,6 +367,7 @@ func NewServer(cfg config.ServerConfig) (srv *EtcdServer, err error) {
 		CompactionSleepInterval: cfg.CompactionSleepInterval,
 		PersistIndex:            cfg.ExperimentalPersistIndex,
 	}
+	//time.Sleep(20 * time.Second)
 	srv.kv = mvcc.New(srv.Logger(), srv.be, srv.lessor, mvccStoreConfig)
 	srv.corruptionChecker = newCorruptionChecker(cfg.Logger, srv, srv.kv.HashStorage())
 

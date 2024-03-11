@@ -44,6 +44,7 @@ type DB interface {
 	DBType() string
 	HashBuckets(ignores func(bucketName, keyName []byte) bool) (uint32, error)
 	Defrag(logger *zap.Logger, dbopts interface{}, defragLimit int) error
+	RunGC(discardRatio float64) error
 }
 
 type Tx interface {
