@@ -494,6 +494,11 @@ func (cr *streamReader) decodeLoop(rc io.ReadCloser, t streamType) error {
 		if err != nil {
 			cr.mu.Lock()
 			cr.close()
+			cr.lg.Info("sizhangDebug: close streamReader",
+				zap.String("type", t.String()), zap.Error(err),
+				zap.String("local-member-id", cr.tr.ID.String()),
+				zap.String("remote-peer-id", cr.peerID.String()),
+			)
 			cr.mu.Unlock()
 			return err
 		}
@@ -673,6 +678,10 @@ func (cr *streamReader) dial(t streamType) (io.ReadCloser, error) {
 }
 
 func (cr *streamReader) close() {
+	cr.lg.Info("sizhangDebug: closing streamReader",
+		zap.String("local-member-id", cr.tr.ID.String()),
+		zap.String("remote-peer-id", cr.peerID.String()),
+	)
 	if cr.closer != nil {
 		if err := cr.closer.Close(); err != nil {
 			if cr.lg != nil {

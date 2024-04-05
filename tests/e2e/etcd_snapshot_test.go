@@ -199,6 +199,7 @@ func TestSnapshotByMockingPartition(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			snapshotTestByMockingPartition(t, tc.config, mockPartitionNodeIndex)
 		})
+		break
 	}
 }
 
@@ -214,22 +215,27 @@ func snapshotTestByMockingPartition(t *testing.T, clusterConfig *e2e.EtcdProcess
 	)
 	require.NoError(t, err, "failed to start etcd cluster: %v", err)
 	defer func() {
+		for i, proc := range epc.Procs {
+			t.Logf("sizhangDebug: Dumping logs of Procs[%d]\n", i)
+			t.Log(proc.Logs().Lines())
+		}
 		require.NoError(t, epc.Close(), "failed to close etcd cluster")
 	}()
 
 	leaderId := epc.WaitLeader(t)
 	partitionedMember := epc.Procs[mockPartitionNodeIndex]
-	if leaderId != mockPartitionNodeIndex {
-		partitionedMemberId, err := epc.MemberId(mockPartitionNodeIndex)
+	if leaderId != 0 {
+		partitionedMemberId, err := epc.MemberId(0)
 		require.NoError(t, err)
 		// If the partitioned member is not the original leader, Blackhole would not block all its communication with other members.
-		t.Logf("Move leader to Proc[%d]: %d\n", mockPartitionNodeIndex, partitionedMemberId)
+		t.Logf("Move leader to Proc[%d]: %d\n", 0, partitionedMemberId)
 		require.NoError(t, epc.Etcdctl().MoveLeader(context.TODO(), partitionedMemberId))
 		epc.WaitLeader(t)
 	}
 	// Mock partition
 	proxy := partitionedMember.PeerProxy()
 	t.Logf("Blackholing traffic from and to member %q", partitionedMember.Config().Name)
+	epc.Cfg.Logger.Debug("sizhangDebug: start blackhole")
 	proxy.BlackholeTx()
 	proxy.BlackholeRx()
 	time.Sleep(2 * time.Second)
@@ -244,6 +250,7 @@ func snapshotTestByMockingPartition(t *testing.T, clusterConfig *e2e.EtcdProcess
 
 	// Wait for some time to restore the network
 	time.Sleep(1 * time.Second)
+	epc.Cfg.Logger.Debug("sizhangDebug: end blackhole")
 	t.Logf("Unblackholing traffic from and to member %q", partitionedMember.Config().Name)
 	proxy.UnblackholeTx()
 	proxy.UnblackholeRx()

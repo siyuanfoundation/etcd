@@ -974,7 +974,7 @@ func (s *EtcdServer) applySnapshot(ep *etcdProgress, toApply *toApply) {
 
 	lg := s.Logger()
 	lg.Info(
-		"applying snapshot",
+		"sizhangDebug: applying snapshot",
 		zap.Uint64("current-snapshot-index", ep.snapi),
 		zap.Uint64("current-applied-index", ep.appliedi),
 		zap.Uint64("incoming-leader-snapshot-index", toApply.snapshot.Metadata.Index),
@@ -1142,6 +1142,7 @@ func (s *EtcdServer) applyEntries(ep *etcdProgress, apply *toApply) {
 	if len(apply.entries) == 0 {
 		return
 	}
+	s.Logger().Info("sizhangDebug: applyEntries", zap.Int("entries_length", len(apply.entries)))
 	firsti := apply.entries[0].Index
 	if firsti > ep.appliedi+1 {
 		lg := s.Logger()

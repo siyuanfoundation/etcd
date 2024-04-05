@@ -503,6 +503,8 @@ func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfig(tb testing.TB, i in
 		curls = []string{curl}
 	}
 
+	logger := zaptest.NewLogger(tb) // cfg.Logger
+
 	peerListenURL := url.URL{Scheme: cfg.PeerScheme(), Host: fmt.Sprintf("localhost:%d", peerPort)}
 	peerAdvertiseURL := url.URL{Scheme: cfg.PeerScheme(), Host: fmt.Sprintf("localhost:%d", peerPort)}
 	var proxyCfg *proxy.ServerConfig
@@ -512,7 +514,7 @@ func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfig(tb testing.TB, i in
 		}
 		peerAdvertiseURL.Host = fmt.Sprintf("localhost:%d", peer2Port)
 		proxyCfg = &proxy.ServerConfig{
-			Logger: zap.NewNop(),
+			Logger: logger,
 			To:     peerListenURL,
 			From:   peerAdvertiseURL,
 		}
@@ -621,7 +623,7 @@ func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfig(tb testing.TB, i in
 	}
 
 	return &EtcdServerProcessConfig{
-		lg:                  cfg.Logger,
+		lg:                  logger,
 		ExecPath:            execPath,
 		Args:                args,
 		EnvVars:             envVars,

@@ -466,6 +466,9 @@ func (s *server) ioCopy(dst io.Writer, src io.Reader, ptype proxyType) {
 		case proxyRx:
 			s.modifyRxMu.RLock()
 			if s.modifyRx != nil {
+				s.lg.Info("sizhangDebug: modifyRx",
+					zap.String("data-received", humanize.Bytes(uint64(len(data)))),
+				)
 				data = s.modifyRx(data)
 			}
 			s.modifyRxMu.RUnlock()
@@ -475,21 +478,21 @@ func (s *server) ioCopy(dst io.Writer, src io.Reader, ptype proxyType) {
 		nr2 := len(data)
 		switch ptype {
 		case proxyTx:
-			s.lg.Debug(
-				"modified tx",
-				zap.String("data-received", humanize.Bytes(uint64(nr1))),
-				zap.String("data-modified", humanize.Bytes(uint64(nr2))),
-				zap.String("from", s.From()),
-				zap.String("to", s.To()),
-			)
+			// s.lg.Debug(
+			// 	"modified tx",
+			// 	zap.String("data-received", humanize.Bytes(uint64(nr1))),
+			// 	zap.String("data-modified", humanize.Bytes(uint64(nr2))),
+			// 	zap.String("from", s.From()),
+			// 	zap.String("to", s.To()),
+			// )
 		case proxyRx:
-			s.lg.Debug(
-				"modified rx",
-				zap.String("data-received", humanize.Bytes(uint64(nr1))),
-				zap.String("data-modified", humanize.Bytes(uint64(nr2))),
-				zap.String("from", s.To()),
-				zap.String("to", s.From()),
-			)
+			// s.lg.Debug(
+			// 	"modified rx",
+			// 	zap.String("data-received", humanize.Bytes(uint64(nr1))),
+			// 	zap.String("data-modified", humanize.Bytes(uint64(nr2))),
+			// 	zap.String("from", s.To()),
+			// 	zap.String("to", s.From()),
+			// )
 		default:
 			panic("unknown proxy type")
 		}

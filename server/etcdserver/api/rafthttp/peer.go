@@ -16,6 +16,7 @@ package rafthttp
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -339,15 +340,30 @@ func (p *peer) pick(m raftpb.Message) (writec chan<- raftpb.Message, picked stri
 	// Considering MsgSnap may have a big size, e.g., 1G, and will block
 	// stream for a long time, only use one of the N pipelines to send MsgSnap.
 	if isMsgSnap(m) {
+		logDebugInfo(p.lg, "sizhangDebug: send snap through pipeline", m)
 		return p.pipeline.msgc, pipelineMsg
 	} else if writec, ok = p.msgAppV2Writer.writec(); ok && isMsgApp(m) {
+		logDebugInfo(p.lg, "sizhangDebug: send through streamAppV2", m)
 		return writec, streamAppV2
 	} else if writec, ok = p.writer.writec(); ok {
+		logDebugInfo(p.lg, "sizhangDebug: send through streamMsg", m)
 		return writec, streamMsg
 	}
+	logDebugInfo(p.lg, "sizhangDebug: send through pipeline", m)
 	return p.pipeline.msgc, pipelineMsg
 }
 
 func isMsgApp(m raftpb.Message) bool { return m.Type == raftpb.MsgApp }
 
 func isMsgSnap(m raftpb.Message) bool { return m.Type == raftpb.MsgSnap }
+
+func logDebugInfo(lg *zap.Logger, info string, m raftpb.Message) {
+	lg.Info(info,
+		zap.String("from", fmt.Sprintf("%x", m.From)),
+		zap.String("to", fmt.Sprintf("%x", m.To)),
+		zap.String("MsgType", m.Type.String()),
+		zap.Int("msgSize", m.Size()),
+		zap.Int("SnapshotSize", m.Snapshot.Size()),
+		zap.Int("EntriesSize", len(m.Entries)),
+	)
+}

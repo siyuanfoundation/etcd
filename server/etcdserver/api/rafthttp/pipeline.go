@@ -121,6 +121,7 @@ func (p *pipeline) handle() {
 			if isMsgSnap(m) {
 				p.raft.ReportSnapshot(m.To, raft.SnapshotFinish)
 			}
+			logDebugInfo(p.status.lg, "sizhangDebug: handled msg in pipeline", m)
 			sentBytes.WithLabelValues(types.ID(m.To).String()).Add(float64(m.Size()))
 		case <-p.stopc:
 			return
