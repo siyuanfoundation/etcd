@@ -31,10 +31,20 @@ func (s *store) scheduleCompaction(compactMainRev, prevCompactRev int64) (KeyVal
 	indexCompactionPauseMs.Observe(float64(time.Since(totalStart) / time.Millisecond))
 
 	totalStart = time.Now()
+	persistedCompactRev := false
+	compactedRev := prevCompactRev
 	defer func() { dbCompactionTotalMs.Observe(float64(time.Since(totalStart) / time.Millisecond)) }()
 	keyCompactions := 0
 	defer func() { dbCompactionKeysCounter.Add(float64(keyCompactions)) }()
 	defer func() { dbCompactionLast.Set(float64(time.Now().Unix())) }()
+	defer func() {
+		if !persistedCompactRev {
+			s.lg.Info("UnsafeSetFinishedCompact", zap.Int64("compact-revision", compactedRev))
+			UnsafeSetFinishedCompact(s.b.BatchTx(), compactedRev)
+			s.b.BatchTx().Unlock()
+			s.b.ForceCommit()
+		}
+	}()
 
 	end := make([]byte, 8)
 	binary.BigEndian.PutUint64(end, uint64(compactMainRev+1))
@@ -58,12 +68,14 @@ func (s *store) scheduleCompaction(compactMainRev, prevCompactRev int64) (KeyVal
 				tx.UnsafeDelete(schema.Key, keys[i])
 				keyCompactions++
 			}
+			compactedRev = rev.Main
 			h.WriteKeyValue(keys[i], values[i])
 		}
 
 		if len(keys) < batchNum {
 			// gofail: var compactBeforeSetFinishedCompact struct{}
 			UnsafeSetFinishedCompact(tx, compactMainRev)
+			persistedCompactRev = true
 			tx.Unlock()
 			// gofail: var compactAfterSetFinishedCompact struct{}
 			hash := h.Hash()
