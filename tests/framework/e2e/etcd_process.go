@@ -31,9 +31,13 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"go.uber.org/zap"
 
+	"go.etcd.io/etcd/api/v3/version"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"go.etcd.io/etcd/pkg/v3/expect"
 	"go.etcd.io/etcd/pkg/v3/proxy"
+	"go.etcd.io/etcd/server/v3/storage/backend"
+	"go.etcd.io/etcd/server/v3/storage/datadir"
+	"go.etcd.io/etcd/server/v3/storage/schema"
 	"go.etcd.io/etcd/tests/v3/framework/config"
 )
 
@@ -60,6 +64,8 @@ type EtcdProcess interface {
 	LazyFS() *LazyFS
 	Logs() LogsExpect
 	Kill() error
+	// VerifySchemaVersion verifies the db file schema version is compatible with the binary after the process is closed.
+	VerifySchemaVersion(lg *zap.Logger, cleanDataDirAferVerify bool) error
 }
 
 type LogsExpect interface {
@@ -249,6 +255,38 @@ func (ep *EtcdServerProcess) Close() error {
 	if !ep.cfg.KeepDataDir {
 		ep.cfg.lg.Info("removing directory", zap.String("data-dir", ep.cfg.DataDirPath))
 		return os.RemoveAll(ep.cfg.DataDirPath)
+	}
+	return nil
+}
+
+func (ep *EtcdServerProcess) VerifySchemaVersion(lg *zap.Logger, cleanDataDirAferVerify bool) error {
+	if !fileutil.Exist(ep.cfg.DataDirPath) {
+		lg.Warn("EtcdServerProcess data dir does not exist", zap.String("data-dir", ep.cfg.DataDirPath))
+		return nil
+	}
+	dbPath := datadir.ToBackendFileName(ep.cfg.DataDirPath)
+	defer func() {
+		if cleanDataDirAferVerify {
+			lg.Info("removing directory", zap.String("data-dir", ep.cfg.DataDirPath))
+			if err := os.RemoveAll(ep.cfg.DataDirPath); err != nil {
+				panic(err)
+			}
+		}
+	}()
+	be := backend.NewDefaultBackend(lg, dbPath)
+	defer be.Close()
+	ver, err := schema.UnsafeDetectSchemaVersion(lg, be.BatchTx())
+	if err != nil {
+		return err
+	}
+	maxStorageVersion := version.V3_6
+	if ep.cfg.ExecPath == BinPath.EtcdLastRelease {
+		maxStorageVersion = version.V3_5
+	}
+	// in a mix version cluster, the storage version would be set to the cluster version,
+	// which could be lower than the server version.
+	if !ver.LessThan(maxStorageVersion) && !ver.Equal(maxStorageVersion) {
+		return fmt.Errorf("expect backend schema version to be <= %s, but got %s", maxStorageVersion.String(), ver.String())
 	}
 	return nil
 }
