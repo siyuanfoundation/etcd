@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
@@ -55,6 +56,18 @@ func TestDowngradeUpgradeClusterOf1WithSnapshot(t *testing.T) {
 
 func TestDowngradeUpgradeClusterOf3WithSnapshot(t *testing.T) {
 	testDowngradeUpgrade(t, 3, true)
+}
+
+func TestPartialDowngrade1OutOfClusterOf3WithSnapshot(t *testing.T) {
+	testPartialDowngrade(t, 3, 1, true)
+}
+
+func TestPartialDowngrade2OutOfClusterOf3WithSnapshot(t *testing.T) {
+	testPartialDowngrade(t, 3, 2, true)
+}
+
+func TestPartialDowngrade3OutOfClusterOf3WithSnapshot(t *testing.T) {
+	testPartialDowngrade(t, 3, 3, true)
 }
 
 func testDowngradeUpgrade(t *testing.T, clusterSize int, triggerSnapshot bool) {
@@ -189,6 +202,104 @@ func testDowngradeUpgrade(t *testing.T, clusterSize int, triggerSnapshot bool) {
 	assert.Equal(t, beforeMembers.Members, afterMembers.Members)
 }
 
+func testPartialDowngrade(t *testing.T, clusterSize, downgradeSize int, triggerSnapshot bool) {
+	currentEtcdBinary := e2e.BinPath.Etcd
+	lastReleaseBinary := e2e.BinPath.EtcdLastRelease
+	if !fileutil.Exist(lastReleaseBinary) {
+		t.Skipf("%q does not exist", lastReleaseBinary)
+	}
+
+	currentVersion, err := e2e.GetVersionFromBinary(currentEtcdBinary)
+	require.NoError(t, err)
+	// wipe any pre-release suffix like -alpha.0 we see commonly in builds
+	currentVersion.PreRelease = ""
+
+	lastVersion, err := e2e.GetVersionFromBinary(lastReleaseBinary)
+	require.NoError(t, err)
+
+	require.Equalf(t, lastVersion.Minor, currentVersion.Minor-1, "unexpected minor version difference")
+	currentVersionStr := currentVersion.String()
+	lastVersionStr := lastVersion.String()
+
+	lastClusterVersion := semver.New(lastVersionStr)
+	lastClusterVersion.Patch = 0
+	lastClusterVersionStr := lastClusterVersion.String()
+
+	e2e.BeforeTest(t)
+
+	t.Logf("Create cluster with version %s", currentVersionStr)
+	var snapshotCount uint64 = 10
+	epc := newCluster(t, clusterSize, snapshotCount)
+	for i := 0; i < len(epc.Procs); i++ {
+		validateVersion(t, epc.Cfg, epc.Procs[i], version.Versions{
+			Cluster: currentVersionStr,
+			Server:  version.Version,
+			Storage: currentVersionStr,
+		})
+	}
+	cc := epc.Etcdctl()
+	t.Logf("Cluster created")
+	if len(epc.Procs) > 1 {
+		t.Log("Waiting health interval to required to make membership changes")
+		time.Sleep(etcdserver.HealthInterval)
+	}
+
+	t.Log("Adding member to test membership, but a learner avoid breaking quorum")
+	resp, err := cc.MemberAddAsLearner(context.Background(), "fake1", []string{"http://127.0.0.1:1001"})
+	require.NoError(t, err)
+	if triggerSnapshot {
+		t.Logf("Generating snapshot")
+		generateSnapshot(t, snapshotCount, cc)
+		verifySnapshot(t, epc)
+	}
+	t.Log("Removing learner to test membership")
+	_, err = cc.MemberRemove(context.Background(), resp.Member.ID)
+	require.NoError(t, err)
+	beforeMembers, _ := getMembersAndKeys(t, cc)
+
+	t.Logf("etcdctl downgrade enable %s", lastVersionStr)
+	downgradeEnable(t, epc, lastVersion)
+
+	t.Log("Downgrade enabled, validating if cluster is ready for downgrade")
+	for i := 0; i < downgradeSize && i < len(epc.Procs); i++ {
+		validateVersion(t, epc.Cfg, epc.Procs[i], version.Versions{
+			Cluster: lastClusterVersionStr,
+			Server:  version.Version,
+			Storage: lastClusterVersionStr,
+		})
+		e2e.AssertProcessLogs(t, epc.Procs[i], "The server is ready to downgrade")
+	}
+
+	t.Log("Cluster is ready for downgrade")
+	t.Logf("Starting downgrade process to %q", lastVersionStr)
+	for i := 0; i < downgradeSize && i < len(epc.Procs); i++ {
+		t.Logf("Downgrading member %d by running %s binary", i, lastReleaseBinary)
+		stopEtcd(t, epc.Procs[i])
+		if clusterSize > 2 {
+			nextIdx := (i + 1) % len(epc.Procs)
+			cc = epc.Procs[nextIdx].Etcdctl()
+			generateSnapshot(t, snapshotCount, cc)
+		}
+		startEtcd(t, epc.Procs[i], lastReleaseBinary)
+	}
+
+	t.Logf("%d members downgraded, validating downgrade", downgradeSize)
+	if downgradeSize == clusterSize {
+		e2e.AssertProcessLogs(t, leader(t, epc), "the cluster has been downgraded")
+	}
+	for i := 0; i < downgradeSize && i < len(epc.Procs); i++ {
+		validateVersion(t, epc.Cfg, epc.Procs[i], version.Versions{
+			Cluster: lastClusterVersionStr,
+			Server:  lastVersionStr,
+		})
+	}
+
+	t.Log("Downgrade complete")
+	afterMembers, _ := getMembersAndKeys(t, cc)
+	assertKVHash(t, epc)
+	assert.Equal(t, beforeMembers.Members, afterMembers.Members)
+}
+
 func newCluster(t *testing.T, clusterSize int, snapshotCount uint64) *e2e.EtcdProcessCluster {
 	epc, err := e2e.NewEtcdProcessCluster(context.TODO(), t,
 		e2e.WithClusterSize(clusterSize),
@@ -316,7 +427,7 @@ func generateSnapshot(t *testing.T, snapshotCount uint64, cc *e2e.EtcdctlV3) {
 	var i uint64
 	t.Logf("Adding keys")
 	for i = 0; i < snapshotCount*3; i++ {
-		err := cc.Put(ctx, fmt.Sprintf("%d", i), "1", config.PutOptions{})
+		err := cc.Put(ctx, fmt.Sprintf("%d", i), fmt.Sprintf("%d", rand.Int31()), config.PutOptions{})
 		assert.NoError(t, err)
 	}
 }
