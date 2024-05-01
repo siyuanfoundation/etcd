@@ -19,8 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coreos/go-semver/semver"
-
 	"go.etcd.io/etcd/api/v3/version"
 	"go.etcd.io/etcd/tests/v3/framework/e2e"
 	"go.etcd.io/etcd/tests/v3/robustness/failpoint"
@@ -107,6 +105,9 @@ func exploratoryScenarios(t *testing.T) []testScenario {
 		if !v.LessThan(version.V3_6) {
 			clusterOfSize3Options = append(clusterOfSize3Options, e2e.WithSnapshotCatchUpEntries(100))
 		}
+		if !v.LessThan(version.V3_5) {
+			clusterOfSize3Options = append(clusterOfSize3Options, e2e.WithVersion(e2e.RandomVersion), e2e.WithLastReleaseProbability(0.1))
+		}
 		scenarios = append(scenarios, testScenario{
 			name:    name,
 			traffic: tp.Traffic,
@@ -170,8 +171,7 @@ func regressionScenarios(t *testing.T) []testScenario {
 			e2e.WithPeerProxy(true),
 			e2e.WithIsPeerTLS(true),
 		}
-		v3_5_13 := semver.Version{Major: 3, Minor: 5, Patch: 13}
-		if v.Compare(v3_5_13) >= 0 {
+		if e2e.CouldSetSnapshotCatchupEntries(e2e.BinPath.Etcd) {
 			opts = append(opts, e2e.WithSnapshotCatchUpEntries(100))
 		}
 		scenarios = append(scenarios, testScenario{

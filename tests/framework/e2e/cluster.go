@@ -19,6 +19,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"path"
 	"path/filepath"
@@ -31,6 +32,7 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
+	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/pkg/v3/proxy"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -148,6 +150,9 @@ type EtcdProcessClusterConfig struct {
 
 	EnvVars map[string]string
 	Version ClusterVersion
+	// LastReleaseProbability is the probability of a process with the last release binary,
+	// used in combination with Version = RandomVersion.
+	LastReleaseProbability float64
 
 	// Cluster setup config
 
@@ -205,6 +210,10 @@ func WithConfig(cfg *EtcdProcessClusterConfig) EPClusterOption {
 
 func WithVersion(version ClusterVersion) EPClusterOption {
 	return func(c *EtcdProcessClusterConfig) { c.Version = version }
+}
+
+func WithLastReleaseProbability(prob float64) EPClusterOption {
+	return func(c *EtcdProcessClusterConfig) { c.LastReleaseProbability = prob }
 }
 
 func WithDataDirPath(path string) EPClusterOption {
@@ -570,27 +579,6 @@ func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfig(tb testing.TB, i in
 		args = append(args, "--discovery="+cfg.Discovery)
 	}
 
-	defaultValues := values(*embed.NewConfig())
-	overrideValues := values(cfg.ServerConfig)
-	for flag, value := range overrideValues {
-		if defaultValue := defaultValues[flag]; value == "" || value == defaultValue {
-			continue
-		}
-		if flag == "experimental-snapshot-catchup-entries" && !(cfg.Version == CurrentVersion || (cfg.Version == MinorityLastVersion && i <= cfg.ClusterSize/2) || (cfg.Version == QuorumLastVersion && i > cfg.ClusterSize/2)) {
-			continue
-		}
-		args = append(args, fmt.Sprintf("--%s=%s", flag, value))
-	}
-	envVars := map[string]string{}
-	for key, value := range cfg.EnvVars {
-		envVars[key] = value
-	}
-	var gofailPort int
-	if cfg.GoFailEnabled {
-		gofailPort = (i+1)*10000 + 2381
-		envVars["GOFAIL_HTTP"] = fmt.Sprintf("127.0.0.1:%d", gofailPort)
-	}
-
 	var execPath string
 	switch cfg.Version {
 	case CurrentVersion:
@@ -609,8 +597,31 @@ func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfig(tb testing.TB, i in
 		}
 	case LastVersion:
 		execPath = BinPath.EtcdLastRelease
+	case RandomVersion:
+		execPath = pickRandomVersion(cfg.Logger, cfg.LastReleaseProbability)
 	default:
 		panic(fmt.Sprintf("Unknown cluster version %v", cfg.Version))
+	}
+
+	defaultValues := values(*embed.NewConfig())
+	overrideValues := values(cfg.ServerConfig)
+	for flag, value := range overrideValues {
+		if defaultValue := defaultValues[flag]; value == "" || value == defaultValue {
+			continue
+		}
+		if flag == "experimental-snapshot-catchup-entries" && !CouldSetSnapshotCatchupEntries(execPath) {
+			continue
+		}
+		args = append(args, fmt.Sprintf("--%s=%s", flag, value))
+	}
+	envVars := map[string]string{}
+	for key, value := range cfg.EnvVars {
+		envVars[key] = value
+	}
+	var gofailPort int
+	if cfg.GoFailEnabled {
+		gofailPort = (i+1)*10000 + 2381
+		envVars["GOFAIL_HTTP"] = fmt.Sprintf("127.0.0.1:%d", gofailPort)
 	}
 
 	return &EtcdServerProcessConfig{
@@ -633,6 +644,23 @@ func (cfg *EtcdProcessClusterConfig) EtcdServerProcessConfig(tb testing.TB, i in
 		Proxy:               proxyCfg,
 		LazyFSEnabled:       cfg.LazyFSEnabled,
 	}
+}
+
+func pickRandomVersion(lg *zap.Logger, lastReleaseProbability float64) string {
+	execPath := BinPath.Etcd
+	if !fileutil.Exist(BinPath.EtcdLastRelease) {
+		lg.Warn("EtcdLastRelease needs to exist to use Random version. Falling back to CurrentVersion", zap.String("EtcdLastRelease-path", BinPath.EtcdLastRelease))
+		return execPath
+	}
+	if lastReleaseProbability < 0 || lastReleaseProbability > 1 {
+		panic(fmt.Sprintf("LastReleaseProbability has to be between [0, 1.0], got %v", lastReleaseProbability))
+	}
+	r := rand.Float64()
+	if r < lastReleaseProbability {
+		execPath = BinPath.EtcdLastRelease
+	}
+	lg.Info("picked random process binary path", zap.String("exec-path", execPath), zap.Float64("LastReleaseProbability", lastReleaseProbability))
+	return execPath
 }
 
 func values(cfg embed.Config) map[string]string {

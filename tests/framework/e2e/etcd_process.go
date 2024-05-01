@@ -508,3 +508,17 @@ func GetVersionFromBinary(binaryPath string) (*semver.Version, error) {
 
 	return nil, fmt.Errorf("could not find version in binary output of %s, lines outputted were %v", binaryPath, lines)
 }
+
+func CouldSetSnapshotCatchupEntries(execPath string) bool {
+	if !fileutil.Exist(execPath) {
+		// default to true if the binary does not exist, because binary might not exist for unit test,
+		// which does not really matter because "experimental-snapshot-catchup-entries" can be set for v3.6 and v3.5.
+		return true
+	}
+	v, err := GetVersionFromBinary(execPath)
+	if err != nil {
+		panic(err)
+	}
+	v3_5_14 := semver.Version{Major: 3, Minor: 5, Patch: 14}
+	return v.Compare(v3_5_14) >= 0
+}
