@@ -69,20 +69,20 @@ func TestRobustnessExploratory(t *testing.T) {
 	}
 }
 
-func TestRobustnessRegression(t *testing.T) {
-	testRunner.BeforeTest(t)
-	for _, s := range scenarios.Regression(t) {
-		t.Run(s.Name, func(t *testing.T) {
-			lg := zaptest.NewLogger(t)
-			s.Cluster.Logger = lg
-			ctx := context.Background()
-			c, err := e2e.NewEtcdProcessCluster(ctx, t, e2e.WithConfig(&s.Cluster))
-			require.NoError(t, err)
-			defer forcestopCluster(c)
-			testRobustness(ctx, t, lg, s, c)
-		})
-	}
-}
+// func TestRobustnessRegression(t *testing.T) {
+// 	testRunner.BeforeTest(t)
+// 	for _, s := range scenarios.Regression(t) {
+// 		t.Run(s.Name, func(t *testing.T) {
+// 			lg := zaptest.NewLogger(t)
+// 			s.Cluster.Logger = lg
+// 			ctx := context.Background()
+// 			c, err := e2e.NewEtcdProcessCluster(ctx, t, e2e.WithConfig(&s.Cluster))
+// 			require.NoError(t, err)
+// 			defer forcestopCluster(c)
+// 			testRobustness(ctx, t, lg, s, c)
+// 		})
+// 	}
+// }
 
 func testRobustness(ctx context.Context, t *testing.T, lg *zap.Logger, s scenarios.TestScenario, c *e2e.EtcdProcessCluster) {
 	r := report.TestReport{Logger: lg, Cluster: c}

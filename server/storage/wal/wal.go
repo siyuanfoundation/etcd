@@ -488,8 +488,8 @@ func (w *WAL) ReadAll() (metadata []byte, state raftpb.HardState, ents []raftpb.
 				offset := e.Index - w.start.Index - 1
 				if offset > uint64(len(ents)) {
 					// return error before append call causes runtime panic
-					return nil, state, nil, fmt.Errorf("%w, snapshot[Index: %d, Term: %d], current entry[Index: %d, Term: %d], len(ents): %d",
-						ErrSliceOutOfRange, w.start.Index, w.start.Term, e.Index, e.Term, len(ents))
+					return nil, state, nil, fmt.Errorf("%s: %w, snapshot[Index: %d, Term: %d], current entry[Index: %d, Term: %d], len(ents): %d\nmetadata=%b\n",
+						w.dir, ErrSliceOutOfRange, w.start.Index, w.start.Term, e.Index, e.Term, len(ents), metadata)
 				}
 				// The line below is potentially overriding some 'uncommitted' entries.
 				ents = append(ents[:offset], e)

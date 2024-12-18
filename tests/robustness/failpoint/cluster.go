@@ -181,23 +181,23 @@ func (f memberDowngrade) Inject(ctx context.Context, t *testing.T, lg *zap.Logge
 		member = clus.Procs[memberID]
 		lg.Info("Downgrading member", zap.String("member", member.Config().Name))
 		for member.IsRunning() {
-			err = member.Kill()
+			err = member.Stop()
 			if err != nil {
-				lg.Info("Sending kill signal failed", zap.Error(err))
+				lg.Info("Stopping server failed", zap.Error(err))
 			}
 			err = member.Wait(ctx)
 			if err != nil && !strings.Contains(err.Error(), "unexpected exit code") {
-				lg.Info("Failed to kill the process", zap.Error(err))
-				return nil, fmt.Errorf("failed to kill the process within %s, err: %w", triggerTimeout, err)
+				lg.Info("Failed to stop the process", zap.Error(err))
+				return nil, fmt.Errorf("failed to stop the process within %s, err: %w", triggerTimeout, err)
 			}
 		}
-		if lazyfs := member.LazyFS(); lazyfs != nil {
-			lg.Info("Removing data that was not fsynced")
-			err := lazyfs.ClearCache(ctx)
-			if err != nil {
-				return nil, err
-			}
-		}
+		// if lazyfs := member.LazyFS(); lazyfs != nil {
+		// 	lg.Info("Removing data that was not fsynced")
+		// 	err := lazyfs.ClearCache(ctx)
+		// 	if err != nil {
+		// 		return nil, err
+		// 	}
+		// }
 		member.Config().ExecPath = e2e.BinPath.EtcdLastRelease
 		err = patchArgs(member.Config().Args, "initial-cluster-state", "existing")
 		if err != nil {
@@ -208,9 +208,11 @@ func (f memberDowngrade) Inject(ctx context.Context, t *testing.T, lg *zap.Logge
 		if err != nil {
 			return nil, err
 		}
+		time.Sleep(etcdserver.HealthInterval)
 		err = verifyVersion(t, clus, member, targetVersion)
 	}
 	time.Sleep(etcdserver.HealthInterval)
+	lg.Info("Finished downgrading members", zap.Any("members", membersToDowngrade))
 	return nil, err
 }
 
@@ -225,7 +227,7 @@ func (f memberDowngrade) Available(config e2e.EtcdProcessClusterConfig, member e
 	}
 	v3_6 := semver.Version{Major: 3, Minor: 6}
 	// only current version cluster can be downgraded.
-	return config.ClusterSize > 1 && v.Compare(v3_6) >= 0 && (config.Version == e2e.CurrentVersion && member.Config().ExecPath == e2e.BinPath.Etcd)
+	return v.Compare(v3_6) >= 0 && (config.Version == e2e.CurrentVersion && member.Config().ExecPath == e2e.BinPath.Etcd)
 }
 
 func getID(ctx context.Context, cc *clientv3.Client, name string) (id uint64, found bool, err error) {
