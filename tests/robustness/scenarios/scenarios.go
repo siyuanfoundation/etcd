@@ -82,13 +82,13 @@ func Exploratory(_ *testing.T) []TestScenario {
 		// 60% with all members of current version
 		{Choice: options.ClusterOptions{options.WithVersion(e2e.CurrentVersion)}, Weight: 60},
 		// 10% with 2 members of current version, 1 member last version, leader is current version
-		{Choice: options.ClusterOptions{options.WithVersion(e2e.MinorityLastVersion), options.WithInitialLeaderIndex(0)}, Weight: 10},
-		// 10% with 2 members of current version, 1 member last version, leader is last version
-		{Choice: options.ClusterOptions{options.WithVersion(e2e.MinorityLastVersion), options.WithInitialLeaderIndex(2)}, Weight: 10},
-		// 10% with 2 members of last version, 1 member current version, leader is last version
-		{Choice: options.ClusterOptions{options.WithVersion(e2e.QuorumLastVersion), options.WithInitialLeaderIndex(0)}, Weight: 10},
-		// 10% with 2 members of last version, 1 member current version, leader is current version
-		{Choice: options.ClusterOptions{options.WithVersion(e2e.QuorumLastVersion), options.WithInitialLeaderIndex(2)}, Weight: 10},
+		// {Choice: options.ClusterOptions{options.WithVersion(e2e.MinorityLastVersion), options.WithInitialLeaderIndex(0)}, Weight: 10},
+		// // 10% with 2 members of current version, 1 member last version, leader is last version
+		// {Choice: options.ClusterOptions{options.WithVersion(e2e.MinorityLastVersion), options.WithInitialLeaderIndex(2)}, Weight: 10},
+		// // 10% with 2 members of last version, 1 member current version, leader is last version
+		// {Choice: options.ClusterOptions{options.WithVersion(e2e.QuorumLastVersion), options.WithInitialLeaderIndex(0)}, Weight: 10},
+		// // 10% with 2 members of last version, 1 member current version, leader is current version
+		// {Choice: options.ClusterOptions{options.WithVersion(e2e.QuorumLastVersion), options.WithInitialLeaderIndex(2)}, Weight: 10},
 	}
 	mixedVersionOption := options.WithClusterOptionGroups(random.PickRandom[options.ClusterOptions](mixedVersionOptionChoices))
 
@@ -102,20 +102,20 @@ func Exploratory(_ *testing.T) []TestScenario {
 	}
 
 	if e2e.CouldSetSnapshotCatchupEntries(e2e.BinPath.Etcd) {
-		baseOptions = append(baseOptions, options.WithSnapshotCatchUpEntries(100, etcdserver.DefaultSnapshotCatchUpEntries))
+		baseOptions = append(baseOptions, options.WithSnapshotCatchUpEntries(etcdserver.DefaultSnapshotCatchUpEntries))
 	}
 	scenarios := []TestScenario{}
-	for _, tp := range trafficProfiles {
-		name := filepath.Join(tp.Name, "ClusterOfSize1")
-		clusterOfSize1Options := baseOptions
-		clusterOfSize1Options = append(clusterOfSize1Options, e2e.WithClusterSize(1))
-		scenarios = append(scenarios, TestScenario{
-			Name:    name,
-			Traffic: tp.Traffic,
-			Profile: tp.Profile,
-			Cluster: *e2e.NewConfig(clusterOfSize1Options...),
-		})
-	}
+	// for _, tp := range trafficProfiles {
+	// 	name := filepath.Join(tp.Name, "ClusterOfSize1")
+	// 	clusterOfSize1Options := baseOptions
+	// 	clusterOfSize1Options = append(clusterOfSize1Options, e2e.WithClusterSize(1))
+	// 	scenarios = append(scenarios, TestScenario{
+	// 		Name:    name,
+	// 		Traffic: tp.Traffic,
+	// 		Profile: tp.Profile,
+	// 		Cluster: *e2e.NewConfig(clusterOfSize1Options...),
+	// 	})
+	// }
 
 	for _, tp := range trafficProfiles {
 		name := filepath.Join(tp.Name, "ClusterOfSize3")

@@ -75,7 +75,7 @@ func DowngradeUpgradeMembers(t *testing.T, lg *zap.Logger, clus *EtcdProcessClus
 		opString = "downgrading"
 		newExecPath = BinPath.EtcdLastRelease
 	}
-	membersToChange := rand.Perm(len(clus.Procs))[:numberOfMembersToChange]
+	membersToChange := rand.Perm(len(clus.Procs))
 	lg.Info(fmt.Sprintf("Test %s members", opString), zap.Any("members", membersToChange))
 
 	// Need to wait health interval for cluster to prepare for downgrade/upgrade

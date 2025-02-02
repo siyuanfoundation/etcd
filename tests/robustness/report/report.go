@@ -56,7 +56,7 @@ func testResultsDirectory(t *testing.T) string {
 
 func (r *TestReport) Report(t *testing.T, force bool) {
 	_, persistResultsEnvSet := os.LookupEnv("PERSIST_RESULTS")
-	if !t.Failed() && !force && !persistResultsEnvSet {
+	if !force && !persistResultsEnvSet {
 		return
 	}
 	path := testResultsDirectory(t)
