@@ -245,6 +245,10 @@ func (f memberDowngradeUpgrade) Name() string {
 	return "MemberDowngradeUpgrade"
 }
 
+func (f memberDowngradeUpgrade) Timeout() time.Duration {
+	return 120 * time.Second
+}
+
 func (f memberDowngradeUpgrade) Available(config e2e.EtcdProcessClusterConfig, member e2e.EtcdProcess, profile traffic.Profile) bool {
 	if !fileutil.Exist(e2e.BinPath.EtcdLastRelease) {
 		return false
