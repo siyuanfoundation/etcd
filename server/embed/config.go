@@ -413,7 +413,7 @@ type Config struct {
 	CorruptCheckTime time.Duration `json:"corrupt-check-time"`
 	// ExperimentalCompactHashCheckEnabled enables leader to periodically check followers compaction hashes.
 	// TODO: delete in v3.7
-	// Deprecated: Use CompactHashCheck Feature Gate. Will be decommissioned in v3.7.
+	// Deprecated: Use CompactHashCheck Feature Gate instead. Will be decommissioned in v3.7.
 	ExperimentalCompactHashCheckEnabled bool `json:"experimental-compact-hash-check-enabled"`
 	// ExperimentalCompactHashCheckTime is the duration of time between leader checks followers compaction hashes.
 	// TODO: delete in v3.7
@@ -423,11 +423,12 @@ type Config struct {
 	CompactHashCheckTime time.Duration `json:"compact-hash-check-time"`
 
 	// ExperimentalEnableLeaseCheckpoint enables leader to send regular checkpoints to other members to prevent reset of remaining TTL on leader change.
+	// Deprecated: Use LeaseCheckpoint Feature Gate instead. Will be decommissioned in v3.7.
 	ExperimentalEnableLeaseCheckpoint bool `json:"experimental-enable-lease-checkpoint"`
 	// ExperimentalEnableLeaseCheckpointPersist enables persisting remainingTTL to prevent indefinite auto-renewal of long lived leases. Always enabled in v3.6. Should be used to ensure smooth upgrade from v3.5 clusters with this feature enabled.
 	// Requires experimental-enable-lease-checkpoint to be enabled.
 	// TODO: Delete in v3.7
-	// Deprecated: To be decommissioned in v3.7.
+	// Deprecated: Use LeaseCheckpointPersist Feature Gate instead. Will be decommissioned in v3.7.
 	ExperimentalEnableLeaseCheckpointPersist bool `json:"experimental-enable-lease-checkpoint-persist"`
 	// ExperimentalCompactionBatchLimit Sets the maximum revisions deleted in each compaction batch.
 	// TODO: Delete in v3.7
@@ -584,12 +585,12 @@ type Config struct {
 
 	// ExperimentalTxnModeWriteWithSharedBuffer enables write transaction to use a shared buffer in its readonly check operations.
 	// TODO: Delete in v3.7
-	// Deprecated: Use TxnModeWriteWithSharedBuffer Feature Flag. Will be decommissioned in v3.7.
+	// Deprecated: Use TxnModeWriteWithSharedBuffer Feature Gate instead. Will be decommissioned in v3.7.
 	ExperimentalTxnModeWriteWithSharedBuffer bool `json:"experimental-txn-mode-write-with-shared-buffer"`
 
 	// ExperimentalStopGRPCServiceOnDefrag enables etcd gRPC service to stop serving client requests on defragmentation.
 	// TODO: Delete in v3.7
-	// Deprecated: Use StopGRPCServiceOnDefrag Feature Flag. Will be decommissioned in v3.7.
+	// Deprecated: Use StopGRPCServiceOnDefrag Feature Gate instead. Will be decommissioned in v3.7.
 	ExperimentalStopGRPCServiceOnDefrag bool `json:"experimental-stop-grpc-service-on-defrag"`
 
 	// V2Deprecation describes phase of API & Storage V2 support.
