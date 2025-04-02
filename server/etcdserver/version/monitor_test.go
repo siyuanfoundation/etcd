@@ -451,3 +451,7 @@ func (s *storageMock) UpdateStorageVersion(v semver.Version) error {
 	s.storageVersion = &v
 	return nil
 }
+
+func (s *storageMock) NeedUpdateClusterParams(v *semver.Version) bool {
+	return false
+}

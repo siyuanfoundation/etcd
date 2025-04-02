@@ -591,6 +591,7 @@ func (s *EtcdServer) start() {
 			zap.String("local-server-version", version.Version),
 			zap.String("cluster-id", s.Cluster().ID().String()),
 			zap.String("cluster-version", version.Cluster(s.ClusterVersion().String())),
+			zap.String("cluster-params", s.ClusterParams().String()),
 		)
 		membership.ClusterVersionMetrics.With(prometheus.Labels{"cluster_version": version.Cluster(s.ClusterVersion().String())}).Set(1)
 	} else {
@@ -599,6 +600,7 @@ func (s *EtcdServer) start() {
 			zap.String("local-member-id", s.MemberID().String()),
 			zap.String("local-server-version", version.Version),
 			zap.String("cluster-version", "to_be_decided"),
+			zap.String("cluster-params", s.ClusterParams().String()),
 		)
 	}
 
@@ -1778,6 +1780,19 @@ func (s *EtcdServer) publishV3(timeout time.Duration) {
 			ClientUrls: s.attributes.ClientURLs,
 		},
 	}
+
+	proposedClusterParams, err := s.Cfg.ClusterParams()
+	if err != nil {
+		s.lg.Panic("failed to propose cluster params", zap.Error(err), zap.String("cluster-version", s.ClusterVersion().String()))
+	}
+	s.lg.Info(
+		"proposing cluster parameters",
+		zap.String("member-id", s.MemberID().String()),
+		zap.String("proposed-cluster-params", proposedClusterParams.String()),
+	)
+	req.MemberAttributes.ProposedClusterParams = proposedClusterParams
+	s.attributes.ProposedClusterParams = membership.ClusterParamsPbToGo(proposedClusterParams)
+
 	// gofail: var beforePublishing struct{}
 	lg := s.Logger()
 	for {
@@ -1793,6 +1808,12 @@ func (s *EtcdServer) publishV3(timeout time.Duration) {
 
 		default:
 		}
+
+		// publishedMemberAttributes := s.cluster.MemberAttributes(s.memberID)
+		// if reflect.DeepEqual(publishedMemberAttributes, s.attributes) {
+		// 	lg.Info("skipping publish because the same member attributes are already published")
+		// 	return
+		// }
 
 		ctx, cancel := context.WithTimeout(s.ctx, timeout)
 		_, err := s.raftRequest(ctx, pb.InternalRaftRequest{ClusterMemberAttrSet: req})
@@ -2008,7 +2029,7 @@ func (s *EtcdServer) applyEntryNormal(e *raftpb.Entry, shouldApplyV3 membership.
 }
 
 func (s *EtcdServer) applyInternalRaftRequest(r *pb.InternalRaftRequest, shouldApplyV3 membership.ShouldApplyV3) *apply.Result {
-	if r.ClusterVersionSet == nil && r.ClusterMemberAttrSet == nil && r.DowngradeInfoSet == nil && r.DowngradeVersionTest == nil {
+	if r.ClusterVersionSet == nil && r.ClusterMemberAttrSet == nil && r.ClusterParamsSet == nil && r.DowngradeInfoSet == nil && r.DowngradeVersionTest == nil {
 		if !shouldApplyV3 {
 			return nil
 		}
@@ -2028,6 +2049,9 @@ func (s *EtcdServer) applyInternalRaftRequest(r *pb.InternalRaftRequest, shouldA
 	case r.ClusterMemberAttrSet != nil:
 		op = "ClusterMemberAttrSet" // Implemented in 3.5.x
 		membershipApplier.ClusterMemberAttrSet(r.ClusterMemberAttrSet, shouldApplyV3)
+	case r.ClusterParamsSet != nil:
+		op = "ClusterParamSet" // Implemented in 3.7.x
+		membershipApplier.ClusterParamsSet(r.ClusterParamsSet)
 	case r.DowngradeInfoSet != nil:
 		op = "DowngradeInfoSet" // Implemented in 3.5.x
 		membershipApplier.DowngradeInfoSet(r.DowngradeInfoSet, shouldApplyV3)
@@ -2042,6 +2066,46 @@ func (s *EtcdServer) applyInternalRaftRequest(r *pb.InternalRaftRequest, shouldA
 	}
 	return &apply.Result{}
 }
+
+// func (s *EtcdServer) updateClusterParams(shouldApplyV3 membership.ShouldApplyV3) {
+// 	if s.ClusterVersion() == nil || s.ClusterVersion().LessThan(version.V3_7) {
+// 		return
+// 	}
+// 	if !shouldApplyV3 {
+// 		return
+// 	}
+// 	lg := s.Logger()
+// 	if !s.isLeader() {
+// 		return
+// 	}
+// 	clusterParams := s.cluster.ReconcileClusterParams(s.ClusterVersion())
+// 	if clusterParams == nil {
+// 		lg.Info("cluster params is nil after reconcilation", zap.String("member-id", s.MemberID().String()))
+// 		return
+// 	}
+// 	lg.Info("request updating cluster params",
+// 		zap.String("member-id", s.MemberID().String()),
+// 		zap.String("cluster-params", clusterParams.String()),
+// 	)
+// 	req := membershippb.ClusterParamsSetRequest{ClusterParams: clusterParams}
+
+// 	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
+// 	_, err := s.raftRequest(ctx, pb.InternalRaftRequest{ClusterParamsSet: &req})
+// 	cancel()
+
+// 	switch {
+// 	case errorspkg.Is(err, nil):
+// 		lg.Info("cluster params is updated", zap.String("cluster-params", clusterParams.String()))
+// 		return
+
+// 	case errorspkg.Is(err, errors.ErrStopped):
+// 		lg.Warn("aborting cluster params update; server is stopped", zap.Error(err))
+// 		return
+
+// 	default:
+// 		lg.Warn("failed to update cluster params", zap.Error(err))
+// 	}
+// }
 
 func noSideEffect(r *pb.InternalRaftRequest) bool {
 	return r.Range != nil || r.AuthUserGet != nil || r.AuthRoleGet != nil || r.AuthStatus != nil
@@ -2253,6 +2317,13 @@ func (s *EtcdServer) ClusterVersion() *semver.Version {
 	return s.cluster.Version()
 }
 
+func (s *EtcdServer) ClusterParams() *membership.ClusterParams {
+	if s.cluster == nil {
+		return nil
+	}
+	return s.cluster.ClusterParams()
+}
+
 func (s *EtcdServer) StorageVersion() *semver.Version {
 	// `applySnapshot` sets a new backend instance, so we need to acquire the bemu lock.
 	s.bemu.RLock()
@@ -2359,20 +2430,28 @@ func (s *EtcdServer) monitorCompactHash() {
 func (s *EtcdServer) updateClusterVersionV3(ver string) {
 	lg := s.Logger()
 
+	var clusterParams *membershippb.ClusterParams
 	if s.cluster.Version() == nil {
+		// use local default if cluster version is not decided from member versions.
+		clusterParams := s.ClusterParams().ToProto()
 		lg.Info(
 			"setting up initial cluster version using v3 API",
 			zap.String("cluster-version", version.Cluster(ver)),
+			zap.String("current-cluster-params", s.ClusterParams().String()),
+			zap.String("new-cluster-params", clusterParams.String()),
 		)
 	} else {
+		clusterParams = s.cluster.ReconcileClusterParams(semver.New(ver))
 		lg.Info(
 			"updating cluster version using v3 API",
 			zap.String("from", version.Cluster(s.cluster.Version().String())),
 			zap.String("to", version.Cluster(ver)),
+			zap.String("current-cluster-params", s.ClusterParams().String()),
+			zap.String("new-cluster-params", clusterParams.String()),
 		)
 	}
 
-	req := membershippb.ClusterVersionSetRequest{Ver: ver}
+	req := membershippb.ClusterVersionSetRequest{Ver: ver, ClusterParams: clusterParams}
 
 	ctx, cancel := context.WithTimeout(s.ctx, s.Cfg.ReqTimeout())
 	_, err := s.raftRequest(ctx, pb.InternalRaftRequest{ClusterVersionSet: &req})
@@ -2380,7 +2459,10 @@ func (s *EtcdServer) updateClusterVersionV3(ver string) {
 
 	switch {
 	case errorspkg.Is(err, nil):
-		lg.Info("cluster version is updated", zap.String("cluster-version", version.Cluster(ver)))
+		lg.Info("cluster version is updated",
+			zap.String("cluster-version", version.Cluster(ver)),
+			zap.String("cluster-params", clusterParams.String()),
+		)
 		return
 
 	case errorspkg.Is(err, errors.ErrStopped):

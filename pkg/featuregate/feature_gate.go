@@ -182,6 +182,8 @@ type MutableVersionedFeatureGate interface {
 	// and resets all the enabled status of the new feature gate.
 	// This is useful for creating a new instance of feature gate without inheriting all the enabled configurations of the base feature gate.
 	DeepCopyAndReset() MutableVersionedFeatureGate
+	// GetFlagSetting returns the initial setting of feature enablement set by the flag.
+	GetFlagSetting() map[string]bool
 }
 
 // featureGate implements FeatureGate as well as pflag.Value for flag parsing.
@@ -539,6 +541,11 @@ func (f *featureGate) Enabled(key Feature) bool {
 	return v
 }
 
+// GetFlagSetting returns the initial setting of feature enablement set by the flag.
+func (f *featureGate) GetFlagSetting() map[string]bool {
+	return f.enabledRaw.Load().(map[string]bool)
+}
+
 // AddFlag adds a flag for setting global feature gates to the specified FlagSet.
 func (f *featureGate) AddFlag(fs *flag.FlagSet, flagName string) {
 	if flagName == "" {
@@ -635,13 +642,18 @@ func (f *featureGate) SetEmulationVersion(emulationVersion *semver.Version) erro
 	enabled := map[Feature]bool{}
 	errs := f.unsafeSetFromMap(enabled, enabledRaw, emulationVersion)
 
-	if len(errs) == 0 {
-		// Persist changes
-		f.enabled.Store(enabled)
-		f.emulationVersion.Store(emulationVersion)
-		return nil
+	// etcd cluster version can change during rolling upgrade/downgrade, it is ok to see unrecognized features
+	// when updating cluster version.
+	if len(errs) > 0 {
+		f.lg.Warn("failed to set some features at the new version",
+			zap.String("emulationVersion", emulationVersion.String()),
+			zap.Errors("errors", errs),
+		)
 	}
-	return aggregateError(errs)
+	// Persist changes
+	f.enabled.Store(enabled)
+	f.emulationVersion.Store(emulationVersion)
+	return nil
 }
 
 func (f *featureGate) EmulationVersion() *semver.Version {

@@ -210,7 +210,6 @@ func TestFeatureGateFlag(t *testing.T) {
 				testAlphaGate: {Default: false, PreRelease: Alpha},
 				testBetaGate:  {Default: false, PreRelease: Beta},
 			})
-			fmt.Printf("sizhangDebug: %v\n", f.KnownFeatures())
 			f.AddFlag(fs, defaultFlagName)
 
 			err := fs.Parse([]string{fmt.Sprintf("--%s=%s", defaultFlagName, test.arg)})

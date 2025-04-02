@@ -17,11 +17,13 @@ package membership
 import (
 	"crypto/sha1"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
+	"go.etcd.io/etcd/api/v3/membershippb"
 	"go.etcd.io/etcd/client/pkg/v3/types"
 )
 
@@ -34,10 +36,60 @@ type RaftAttributes struct {
 	IsLearner bool `json:"isLearner,omitempty"`
 }
 
+type Feature struct {
+	Name string `json:"name,omitempty"`
+	// Enabled indicates if the feature is enabled.
+	Enabled bool `json:"enabled,omitempty"`
+}
+
+type ClusterParams struct {
+	FeatureGates map[string]bool `json:"featureGates,omitempty"`
+}
+
+func (c *ClusterParams) String() string {
+	if c == nil {
+		return ""
+	}
+	b, err := json.Marshal(c)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
+
+func (c *ClusterParams) Clone() *ClusterParams {
+	if c == nil {
+		return nil
+	}
+	cp := &ClusterParams{}
+	if c.FeatureGates != nil {
+		cp.FeatureGates = make(map[string]bool)
+		for k, v := range c.FeatureGates {
+			cp.FeatureGates[k] = v
+		}
+	}
+	return cp
+}
+
+func (c *ClusterParams) ToProto() *membershippb.ClusterParams {
+	if c == nil {
+		return nil
+	}
+	ret := membershippb.ClusterParams{}
+	if c.FeatureGates == nil {
+		return &ret
+	}
+	for k, v := range c.FeatureGates {
+		ret.FeatureGates = append(ret.FeatureGates, &membershippb.Feature{Name: k, Enabled: v})
+	}
+	return &ret
+}
+
 // Attributes represents all the non-raft related attributes of an etcd member.
 type Attributes struct {
-	Name       string   `json:"name,omitempty"`
-	ClientURLs []string `json:"clientURLs,omitempty"`
+	Name                  string         `json:"name,omitempty"`
+	ClientURLs            []string       `json:"clientURLs,omitempty"`
+	ProposedClusterParams *ClusterParams `json:"proposedClusterParams,omitempty"`
 }
 
 type Member struct {
@@ -97,7 +149,8 @@ func (m *Member) Clone() *Member {
 			IsLearner: m.IsLearner,
 		},
 		Attributes: Attributes{
-			Name: m.Name,
+			Name:                  m.Name,
+			ProposedClusterParams: m.ProposedClusterParams.Clone(),
 		},
 	}
 	if m.PeerURLs != nil {

@@ -58,6 +58,7 @@ type backendMock struct {
 	removed       map[types.ID]bool
 	version       *semver.Version
 	downgradeInfo *serverversion.DowngradeInfo
+	clusterParams *ClusterParams
 }
 
 var _ MembershipBackend = (*backendMock)(nil)
@@ -100,3 +101,11 @@ func (b *backendMock) MustSaveDowngradeToBackend(downgradeInfo *serverversion.Do
 	b.downgradeInfo = downgradeInfo
 }
 func (b *backendMock) DowngradeInfoFromBackend() *serverversion.DowngradeInfo { return b.downgradeInfo }
+
+func (b *backendMock) MustSaveClusterParamsToBackend(clusterParams *ClusterParams) {
+	b.clusterParams = clusterParams
+}
+
+func (b *backendMock) ClusterParamsFromBackend() *ClusterParams {
+	return b.clusterParams
+}

@@ -73,10 +73,14 @@ func TestValidate(t *testing.T) {
 			version: version.V3_6,
 		},
 		{
-			name:           `V3.7 schema is unknown and should return error`,
-			version:        version.V3_7,
+			name:    `V3.7 schema is correct`,
+			version: version.V3_7,
+		},
+		{
+			name:           `V3.8 schema is unknown and should return error`,
+			version:        version.V3_8,
 			expectError:    true,
-			expectErrorMsg: `version "3.7.0" is not supported`,
+			expectErrorMsg: `version "3.8.0" is not supported`,
 		},
 	}
 	for _, tc := range tcs {
@@ -157,20 +161,38 @@ func TestMigrate(t *testing.T) {
 			expectVersion: &version.V3_7,
 		},
 		{
-			name:           "Upgrading 3.6 to v3.7 is not supported",
-			version:        version.V3_6,
-			targetVersion:  version.V3_7,
-			expectVersion:  &version.V3_6,
-			expectError:    true,
-			expectErrorMsg: `cannot create migration plan: version "3.7.0" is not supported`,
+			name:          "Upgrading 3.6 to v3.7 is supported",
+			version:       version.V3_6,
+			targetVersion: version.V3_7,
+			expectVersion: &version.V3_7,
 		},
 		{
-			name:           "Downgrading v3.7 to v3.6 is not supported",
+			name:          "Downgrading v3.7 to v3.6 is supported",
+			version:       version.V3_7,
+			targetVersion: version.V3_6,
+			expectVersion: &version.V3_6,
+		},
+		{
+			name:          `Migrate on same v3.8 version passes`,
+			version:       version.V3_8,
+			targetVersion: version.V3_8,
+			expectVersion: &version.V3_8,
+		},
+		{
+			name:           "Upgrading 3.7 to v3.8 is not supported",
 			version:        version.V3_7,
-			targetVersion:  version.V3_6,
+			targetVersion:  version.V3_8,
 			expectVersion:  &version.V3_7,
 			expectError:    true,
-			expectErrorMsg: `cannot create migration plan: version "3.7.0" is not supported`,
+			expectErrorMsg: `cannot create migration plan: version "3.8.0" is not supported`,
+		},
+		{
+			name:           "Downgrading v3.8 to v3.7 is not supported",
+			version:        version.V3_8,
+			targetVersion:  version.V3_7,
+			expectVersion:  &version.V3_8,
+			expectError:    true,
+			expectErrorMsg: `cannot create migration plan: version "3.8.0" is not supported`,
 		},
 		{
 			name:          "Downgrading v3.6 to v3.5 works as there are no v3.6 wal entries",
@@ -234,20 +256,21 @@ func TestMigrateIsReversible(t *testing.T) {
 		state          map[string]string
 	}{
 		{
-			initialVersion: version.V3_5,
-			state: map[string]string{
-				"confState":        `{"auto_leave":false}`,
-				"consistent_index": "\x00\x00\x00\x00\x00\x00\x00\x01",
-				"term":             "\x00\x00\x00\x00\x00\x00\x00\x01",
-			},
-		},
-		{
 			initialVersion: version.V3_6,
 			state: map[string]string{
 				"confState":        `{"auto_leave":false}`,
 				"consistent_index": "\x00\x00\x00\x00\x00\x00\x00\x01",
 				"term":             "\x00\x00\x00\x00\x00\x00\x00\x01",
 				"storageVersion":   "3.6.0",
+			},
+		},
+		{
+			initialVersion: version.V3_7,
+			state: map[string]string{
+				"confState":        `{"auto_leave":false}`,
+				"consistent_index": "\x00\x00\x00\x00\x00\x00\x00\x01",
+				"term":             "\x00\x00\x00\x00\x00\x00\x00\x01",
+				"storageVersion":   "3.7.0",
 			},
 		},
 	}
@@ -302,6 +325,9 @@ func setupBackendData(t *testing.T, ver semver.Version, overrideKeys func(tx bac
 	require.NotNilf(t, tx, "batch tx is nil")
 	tx.Lock()
 	UnsafeCreateMetaBucket(tx)
+	if ver.Compare(version.V3_6) >= 0 {
+		tx.UnsafeCreateBucket(Cluster)
+	}
 	if overrideKeys != nil {
 		overrideKeys(tx)
 	} else {
@@ -318,6 +344,12 @@ func setupBackendData(t *testing.T, ver semver.Version, overrideKeys func(tx bac
 			MustUnsafeSaveConfStateToBackend(zap.NewNop(), tx, &raftpb.ConfState{})
 			UnsafeUpdateConsistentIndex(tx, 1, 1)
 			UnsafeSetStorageVersion(tx, &version.V3_7)
+			tx.UnsafePut(Cluster, []byte("clusterParams"), []byte(""))
+		case version.V3_8:
+			MustUnsafeSaveConfStateToBackend(zap.NewNop(), tx, &raftpb.ConfState{})
+			UnsafeUpdateConsistentIndex(tx, 1, 1)
+			UnsafeSetStorageVersion(tx, &version.V3_8)
+			tx.UnsafePut(Cluster, []byte("clusterParams"), []byte(""))
 			tx.UnsafePut(Meta, []byte("future-key"), []byte(""))
 		default:
 			t.Fatalf("Unsupported storage version")

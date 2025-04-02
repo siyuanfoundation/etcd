@@ -28,6 +28,7 @@ type MembershipBackend interface {
 	ClusterVersionBackend
 	MemberBackend
 	DowngradeInfoBackend
+	ClusterParamsBackend
 	MustCreateBackendBuckets()
 }
 
@@ -46,6 +47,11 @@ type MemberBackend interface {
 type DowngradeInfoBackend interface {
 	MustSaveDowngradeToBackend(*version.DowngradeInfo)
 	DowngradeInfoFromBackend() *version.DowngradeInfo
+}
+
+type ClusterParamsBackend interface {
+	MustSaveClusterParamsToBackend(clusterParams *ClusterParams)
+	ClusterParamsFromBackend() *ClusterParams
 }
 
 func MustParseMemberIDFromKey(lg *zap.Logger, key string) types.ID {
