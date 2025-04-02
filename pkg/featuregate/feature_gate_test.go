@@ -205,11 +205,12 @@ func TestFeatureGateFlag(t *testing.T) {
 	for i, test := range tests {
 		t.Run(test.arg, func(t *testing.T) {
 			fs := flag.NewFlagSet("testfeaturegateflag", flag.ContinueOnError)
-			f := New("test", zaptest.NewLogger(t))
+			f := NewVersionedFeatureGate("test", zaptest.NewLogger(t), nil)
 			f.Add(map[Feature]FeatureSpec{
 				testAlphaGate: {Default: false, PreRelease: Alpha},
 				testBetaGate:  {Default: false, PreRelease: Beta},
 			})
+			fmt.Printf("sizhangDebug: %v\n", f.KnownFeatures())
 			f.AddFlag(fs, defaultFlagName)
 
 			err := fs.Parse([]string{fmt.Sprintf("--%s=%s", defaultFlagName, test.arg)})
@@ -231,7 +232,7 @@ func TestFeatureGateOverride(t *testing.T) {
 	const testBetaGate Feature = "TestBeta"
 
 	// Don't parse the flag, assert defaults are used.
-	f := New("test", zaptest.NewLogger(t))
+	f := NewVersionedFeatureGate("test", zaptest.NewLogger(t), nil)
 	f.Add(map[Feature]FeatureSpec{
 		testAlphaGate: {Default: false, PreRelease: Alpha},
 		testBetaGate:  {Default: false, PreRelease: Beta},
@@ -252,7 +253,7 @@ func TestFeatureGateFlagDefaults(t *testing.T) {
 	const testBetaGate Feature = "TestBeta"
 
 	// Don't parse the flag, assert defaults are used.
-	f := New("test", zaptest.NewLogger(t))
+	f := NewVersionedFeatureGate("test", zaptest.NewLogger(t), nil)
 	f.Add(map[Feature]FeatureSpec{
 		testAlphaGate: {Default: false, PreRelease: Alpha},
 		testBetaGate:  {Default: true, PreRelease: Beta},
@@ -272,7 +273,7 @@ func TestFeatureGateKnownFeatures(t *testing.T) {
 	)
 
 	// Don't parse the flag, assert defaults are used.
-	f := New("test", zaptest.NewLogger(t))
+	f := NewVersionedFeatureGate("test", zaptest.NewLogger(t), nil)
 	f.Add(map[Feature]FeatureSpec{
 		testAlphaGate:      {Default: false, PreRelease: Alpha},
 		testBetaGate:       {Default: true, PreRelease: Beta},
@@ -379,7 +380,7 @@ func TestFeatureGateSetFromMap(t *testing.T) {
 	}
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("SetFromMap %s", test.name), func(t *testing.T) {
-			f := New("test", zaptest.NewLogger(t))
+			f := NewVersionedFeatureGate("test", zaptest.NewLogger(t), nil)
 			f.Add(map[Feature]FeatureSpec{
 				testAlphaGate:       {Default: false, PreRelease: Alpha},
 				testBetaGate:        {Default: false, PreRelease: Beta},
@@ -448,7 +449,7 @@ func TestFeatureGateString(t *testing.T) {
 	}
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("SetFromMap %s", test.expect), func(t *testing.T) {
-			f := New("test", zaptest.NewLogger(t))
+			f := NewVersionedFeatureGate("test", zaptest.NewLogger(t), nil)
 			f.Add(featuremap)
 			f.SetFromMap(test.setmap)
 			result := f.String()
@@ -459,7 +460,7 @@ func TestFeatureGateString(t *testing.T) {
 
 func TestFeatureGateOverrideDefault(t *testing.T) {
 	t.Run("overrides take effect", func(t *testing.T) {
-		f := New("test", zaptest.NewLogger(t))
+		f := NewVersionedFeatureGate("test", zaptest.NewLogger(t), nil)
 		err := f.Add(map[Feature]FeatureSpec{
 			"TestFeature1": {Default: true},
 			"TestFeature2": {Default: false},
@@ -472,7 +473,7 @@ func TestFeatureGateOverrideDefault(t *testing.T) {
 	})
 
 	t.Run("overrides are preserved across deep copies", func(t *testing.T) {
-		f := New("test", zaptest.NewLogger(t))
+		f := NewVersionedFeatureGate("test", zaptest.NewLogger(t), nil)
 		err := f.Add(map[Feature]FeatureSpec{"TestFeature": {Default: false}})
 		require.NoError(t, err)
 		require.NoError(t, f.OverrideDefault("TestFeature", true))
@@ -481,7 +482,7 @@ func TestFeatureGateOverrideDefault(t *testing.T) {
 	})
 
 	t.Run("reflected in known features", func(t *testing.T) {
-		f := New("test", zaptest.NewLogger(t))
+		f := NewVersionedFeatureGate("test", zaptest.NewLogger(t), nil)
 		err := f.Add(map[Feature]FeatureSpec{"TestFeature": {
 			Default:    false,
 			PreRelease: Alpha,
@@ -500,7 +501,7 @@ func TestFeatureGateOverrideDefault(t *testing.T) {
 	})
 
 	t.Run("may not change default for specs with locked defaults", func(t *testing.T) {
-		f := New("test", zaptest.NewLogger(t))
+		f := NewVersionedFeatureGate("test", zaptest.NewLogger(t), nil)
 		err := f.Add(map[Feature]FeatureSpec{
 			"LockedFeature": {
 				Default:       true,
@@ -513,7 +514,7 @@ func TestFeatureGateOverrideDefault(t *testing.T) {
 	})
 
 	t.Run("does not supersede explicitly-set value", func(t *testing.T) {
-		f := New("test", zaptest.NewLogger(t))
+		f := NewVersionedFeatureGate("test", zaptest.NewLogger(t), nil)
 		err := f.Add(map[Feature]FeatureSpec{"TestFeature": {Default: true}})
 		require.NoError(t, err)
 		require.NoError(t, f.OverrideDefault("TestFeature", false))
@@ -522,7 +523,7 @@ func TestFeatureGateOverrideDefault(t *testing.T) {
 	})
 
 	t.Run("prevents re-registration of feature spec after overriding default", func(t *testing.T) {
-		f := New("test", zaptest.NewLogger(t))
+		f := NewVersionedFeatureGate("test", zaptest.NewLogger(t), nil)
 		err := f.Add(map[Feature]FeatureSpec{
 			"TestFeature": {
 				Default:    true,
@@ -541,13 +542,13 @@ func TestFeatureGateOverrideDefault(t *testing.T) {
 	})
 
 	t.Run("does not allow override for an unknown feature", func(t *testing.T) {
-		f := New("test", zaptest.NewLogger(t))
+		f := NewVersionedFeatureGate("test", zaptest.NewLogger(t), nil)
 		err := f.OverrideDefault("TestFeature", true)
 		assert.Errorf(t, err, "expected an error to be returned in attempt to override default for unregistered feature")
 	})
 
 	t.Run("returns error if already added to flag set", func(t *testing.T) {
-		f := New("test", zaptest.NewLogger(t))
+		f := NewVersionedFeatureGate("test", zaptest.NewLogger(t), nil)
 		fs := flag.NewFlagSet("test", flag.ContinueOnError)
 		f.AddFlag(fs, defaultFlagName)
 

@@ -1698,7 +1698,7 @@ func TestAddFeatureGateMetrics(t *testing.T) {
 		testAlphaGate: {Default: true, PreRelease: featuregate.Alpha},
 		testBetaGate:  {Default: false, PreRelease: featuregate.Beta},
 	}
-	fg := featuregate.New("test", zaptest.NewLogger(t))
+	fg := featuregate.NewVersionedFeatureGate("test", zaptest.NewLogger(t), nil)
 	fg.Add(featuremap)
 
 	addFeatureGateMetrics(fg, serverFeatureEnabled)

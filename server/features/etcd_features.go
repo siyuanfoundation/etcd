@@ -17,8 +17,10 @@ package features
 import (
 	"fmt"
 
+	"github.com/coreos/go-semver/semver"
 	"go.uber.org/zap"
 
+	"go.etcd.io/etcd/api/v3/version"
 	"go.etcd.io/etcd/pkg/v3/featuregate"
 )
 
@@ -82,15 +84,31 @@ const (
 )
 
 var (
-	DefaultEtcdServerFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
-		DistributedTracing:           {Default: false, PreRelease: featuregate.Alpha},
-		StopGRPCServiceOnDefrag:      {Default: false, PreRelease: featuregate.Alpha},
-		InitialCorruptCheck:          {Default: false, PreRelease: featuregate.Alpha},
-		CompactHashCheck:             {Default: false, PreRelease: featuregate.Alpha},
-		TxnModeWriteWithSharedBuffer: {Default: true, PreRelease: featuregate.Beta},
-		LeaseCheckpoint:              {Default: false, PreRelease: featuregate.Alpha},
-		LeaseCheckpointPersist:       {Default: false, PreRelease: featuregate.Alpha},
-		SetMemberLocalAddr:           {Default: false, PreRelease: featuregate.Alpha},
+	DefaultEtcdServerFeatureGates = map[featuregate.Feature]featuregate.VersionedSpecs{
+		DistributedTracing: {
+			{Version: &semver.Version{Major: 3, Minor: 5}, Default: false, PreRelease: featuregate.Alpha},
+		},
+		StopGRPCServiceOnDefrag: {
+			{Version: &semver.Version{Major: 3, Minor: 6}, Default: false, PreRelease: featuregate.Alpha},
+		},
+		InitialCorruptCheck: {
+			{Version: &semver.Version{Major: 3, Minor: 6}, Default: false, PreRelease: featuregate.Alpha},
+		},
+		CompactHashCheck: {
+			{Version: &semver.Version{Major: 3, Minor: 6}, Default: false, PreRelease: featuregate.Alpha},
+		},
+		TxnModeWriteWithSharedBuffer: {
+			{Version: &semver.Version{Major: 3, Minor: 5}, Default: true, PreRelease: featuregate.Beta},
+		},
+		LeaseCheckpoint: {
+			{Version: &semver.Version{Major: 3, Minor: 6}, Default: false, PreRelease: featuregate.Alpha},
+		},
+		LeaseCheckpointPersist: {
+			{Version: &semver.Version{Major: 3, Minor: 6}, Default: false, PreRelease: featuregate.Alpha},
+		},
+		SetMemberLocalAddr: {
+			{Version: &semver.Version{Major: 3, Minor: 6}, Default: false, PreRelease: featuregate.Alpha},
+		},
 	}
 	// ExperimentalFlagToFeatureMap is the map from the cmd line flags of experimental features
 	// to their corresponding feature gates.
@@ -106,9 +124,13 @@ var (
 )
 
 func NewDefaultServerFeatureGate(name string, lg *zap.Logger) featuregate.FeatureGate {
-	fg := featuregate.New(fmt.Sprintf("%sServerFeatureGate", name), lg)
-	if err := fg.Add(DefaultEtcdServerFeatureGates); err != nil {
-		panic(err)
+	etcdVersion, err := semver.NewVersion(version.Version)
+	if err != nil {
+		lg.Panic("failed to parse etcd version", zap.String("version", version.Version))
+	}
+	fg := featuregate.NewVersionedFeatureGate(fmt.Sprintf("%sServerFeatureGate", name), lg, &semver.Version{Major: etcdVersion.Major, Minor: etcdVersion.Minor})
+	if err := fg.AddVersioned(DefaultEtcdServerFeatureGates); err != nil {
+		lg.Panic("failed to add etcd server feature gates", zap.Error(err))
 	}
 	return fg
 }
