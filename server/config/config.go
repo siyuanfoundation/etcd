@@ -209,6 +209,8 @@ type ServerConfig struct {
 
 	// ServerFeatureGate is a server level feature gate
 	ServerFeatureGate featuregate.FeatureGate
+	// ClusterFeatureGate is a cluster level feature gate
+	ClusterFeatureGate featuregate.FeatureGate
 
 	// Metrics types of metrics - should be either 'basic' or 'extensive'
 	Metrics string

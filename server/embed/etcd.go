@@ -236,6 +236,7 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 		V2Deprecation:                     cfg.V2DeprecationEffective(),
 		ExperimentalLocalAddress:          cfg.InferLocalAddr(),
 		ServerFeatureGate:                 cfg.ServerFeatureGate,
+		ClusterFeatureGate:                cfg.ClusterFeatureGate,
 		Metrics:                           cfg.Metrics,
 	}
 

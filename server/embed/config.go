@@ -126,7 +126,8 @@ const (
 	// backend freelist map type
 	freelistArrayType = "array"
 
-	ServerFeatureGateFlagName = "feature-gates"
+	ServerFeatureGateFlagName  = "feature-gates"
+	ClusterFeatureGateFlagName = "cluster-feature-gates"
 )
 
 var (
@@ -600,6 +601,8 @@ type Config struct {
 
 	// ServerFeatureGate is a server level feature gate
 	ServerFeatureGate featuregate.FeatureGate
+	// ClusterFeatureGate is a cluster level feature gate
+	ClusterFeatureGate featuregate.FeatureGate
 	// FlagsExplicitlySet stores if a flag is explicitly set from the cmd line or config file.
 	FlagsExplicitlySet map[string]bool
 }
@@ -624,7 +627,8 @@ type configJSON struct {
 	ClientSecurityJSON securityConfig `json:"client-transport-security"`
 	PeerSecurityJSON   securityConfig `json:"peer-transport-security"`
 
-	ServerFeatureGatesJSON string `json:"feature-gates"`
+	ServerFeatureGatesJSON  string `json:"feature-gates"`
+	ClusterFeatureGatesJSON string `json:"cluster-feature-gates"`
 }
 
 type securityConfig struct {
@@ -743,6 +747,7 @@ func NewConfig() *Config {
 		AutoCompactionMode:      DefaultAutoCompactionMode,
 		AutoCompactionRetention: DefaultAutoCompactionRetention,
 		ServerFeatureGate:       features.NewDefaultServerFeatureGate(DefaultName, nil),
+		ClusterFeatureGate:      features.NewDefaultClusterFeatureGate(DefaultName, nil),
 		FlagsExplicitlySet:      map[string]bool{},
 	}
 	cfg.InitialCluster = cfg.InitialClusterFromName(cfg.Name)
@@ -962,6 +967,7 @@ func (cfg *Config) AddFlags(fs *flag.FlagSet) {
 
 	// featuregate
 	cfg.ServerFeatureGate.(featuregate.MutableFeatureGate).AddFlag(fs, ServerFeatureGateFlagName)
+	cfg.ClusterFeatureGate.(featuregate.MutableFeatureGate).AddFlag(fs, ClusterFeatureGateFlagName)
 }
 
 func ConfigFromFile(path string) (*Config, error) {
@@ -987,6 +993,13 @@ func (cfg *configYAML) configFromFile(path string) error {
 
 	if cfg.configJSON.ServerFeatureGatesJSON != "" {
 		err = cfg.Config.ServerFeatureGate.(featuregate.MutableFeatureGate).Set(cfg.configJSON.ServerFeatureGatesJSON)
+		if err != nil {
+			return err
+		}
+	}
+
+	if cfg.configJSON.ClusterFeatureGatesJSON != "" {
+		err = cfg.Config.ClusterFeatureGate.(featuregate.MutableFeatureGate).Set(cfg.configJSON.ClusterFeatureGatesJSON)
 		if err != nil {
 			return err
 		}
