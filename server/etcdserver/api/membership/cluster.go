@@ -29,6 +29,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
+	"go.etcd.io/etcd/api/v3/membershippb"
 	"go.etcd.io/etcd/api/v3/version"
 	"go.etcd.io/etcd/client/pkg/v3/types"
 	"go.etcd.io/etcd/pkg/v3/netutil"
@@ -52,6 +53,9 @@ type RaftCluster struct {
 	sync.Mutex // guards the fields below
 	version    *semver.Version
 	members    map[types.ID]*Member
+
+	clusterPrams *ClusterParams
+
 	// removed contains the ids of removed members in the cluster.
 	// removed id cannot be reused.
 	removed map[types.ID]bool
@@ -260,6 +264,7 @@ func (c *RaftCluster) UnsafeLoad() {
 	if c.be != nil {
 		c.version = c.be.ClusterVersionFromBackend()
 		c.members, c.removed = c.be.MustReadMembersFromBackend()
+		c.clusterPrams = c.be.ClusterParamsFromBackend()
 	} else {
 		c.version = clusterVersionFromStore(c.lg, c.v2store)
 		c.members, c.removed = membersFromStore(c.lg, c.v2store)
@@ -307,6 +312,12 @@ func (c *RaftCluster) Recover(onSet func(*zap.Logger, *semver.Version)) {
 		c.lg.Info(
 			"set cluster version from store",
 			zap.String("cluster-version", version.Cluster(c.version.String())),
+		)
+	}
+	if c.clusterPrams != nil {
+		c.lg.Info(
+			"set cluster params from store",
+			zap.String("cluster-params", c.clusterPrams.String()),
 		)
 	}
 }
@@ -619,10 +630,88 @@ func (c *RaftCluster) SetVersion(ver *semver.Version, onSet func(*zap.Logger, *s
 		ClusterVersionMetrics.With(prometheus.Labels{"cluster_version": version.Cluster(oldVer.String())}).Set(0)
 	}
 	ClusterVersionMetrics.With(prometheus.Labels{"cluster_version": version.Cluster(ver.String())}).Set(1)
+	// reset cluster feature gate
 	if c.versionChanged != nil {
 		c.versionChanged.Notify()
 	}
 	onSet(c.lg, ver)
+}
+
+func (c *RaftCluster) ReconcileClusterParams() *membershippb.ClusterParams {
+	proposedClusterParams := []*ClusterParams{}
+	c.lg.Info("reconcile cluster params",
+		zap.String("cluster-id", c.cid.String()),
+		zap.String("local-member-id", c.localID.String()),
+		zap.String("current-cluster-params", c.ClusterParams().String()),
+	)
+	for _, member := range c.VotingMembers() {
+		c.lg.Info("member ProposedClusterParams",
+			zap.String("member-id", member.ID.String()),
+			zap.String("member-proposed-cluster-params", member.Attributes.ProposedClusterParams.String()),
+		)
+		if member.Attributes.ProposedClusterParams != nil {
+			proposedClusterParams = append(proposedClusterParams, member.Attributes.ProposedClusterParams)
+		}
+	}
+	if len(proposedClusterParams) == 0 {
+		return nil
+	}
+	features := make(map[string]bool)
+	clusterParams := membershippb.ClusterParams{}
+	for k, v := range proposedClusterParams[0].FeatureGates {
+		features[k] = v
+	}
+	for i := 1; i < len(proposedClusterParams); i++ {
+		for k, v := range proposedClusterParams[i].FeatureGates {
+			if val, ok := features[k]; ok {
+				features[k] = v && val
+			} else {
+				features[k] = false
+			}
+		}
+	}
+	for k, v := range features {
+		clusterParams.FeatureGates = append(clusterParams.FeatureGates, &membershippb.Feature{Name: string(k), Enabled: v})
+	}
+	c.lg.Info("reconciled cluster params",
+		zap.String("cluster-id", c.cid.String()),
+		zap.String("local-member-id", c.localID.String()),
+		zap.String("current-cluster-params", c.ClusterParams().String()),
+		zap.String("reconciled-cluster-params", clusterParams.String()),
+	)
+	return &clusterParams
+}
+
+func (c *RaftCluster) ClusterParams() *ClusterParams {
+	c.Lock()
+	defer c.Unlock()
+	return c.clusterPrams
+}
+
+func (c *RaftCluster) SetClusterParams(cp *membershippb.ClusterParams) {
+	c.Lock()
+	defer c.Unlock()
+	clusterParams := ClusterParamsPbToGo(cp)
+	c.clusterPrams = clusterParams
+	if c.be != nil {
+		c.be.MustSaveClusterParamsToBackend(clusterParams)
+	}
+	c.lg.Info(
+		"set cluster params",
+		zap.String("cluster-id", c.cid.String()),
+		zap.String("cluster-params", c.ClusterParams().String()),
+	)
+}
+
+func ClusterParamsPbToGo(r *membershippb.ClusterParams) *ClusterParams {
+	clusterParams := ClusterParams{}
+	if r == nil || r.FeatureGates == nil {
+		return &clusterParams
+	}
+	for _, f := range r.FeatureGates {
+		clusterParams.FeatureGates[f.Name] = f.Enabled
+	}
+	return &clusterParams
 }
 
 func (c *RaftCluster) IsReadyToAddVotingMember() bool {

@@ -29,6 +29,7 @@ import (
 	"go.uber.org/zap"
 
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
+	"go.etcd.io/etcd/api/v3/version"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"go.etcd.io/etcd/client/pkg/v3/types"
 	"go.etcd.io/etcd/pkg/v3/pbutil"
@@ -353,6 +354,19 @@ func bootstrapNewClusterNoWAL(cfg config.ServerConfig, prt http.RoundTripper) (*
 		if cl, err = membership.NewClusterFromURLsMap(cfg.Logger, cfg.InitialClusterToken, urlsmap, membership.WithMaxLearners(cfg.MaxLearners)); err != nil {
 			return nil, err
 		}
+	}
+	// For new cluster, initialize clusterParams with the default based on server version.
+	clusterParams, err := cfg.ClusterParams(version.Version, true)
+	if err != nil {
+		return nil, err
+	}
+	cl.SetClusterParams(clusterParams)
+	if clusterParams != nil {
+		cfg.Logger.Info(
+			"bootstrap cluster params for new cluster",
+			zap.String("server-version", version.Version),
+			zap.String("cluster-params", clusterParams.String()),
+		)
 	}
 	return &bootstrappedCluster{
 		remotes: nil,

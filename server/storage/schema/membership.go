@@ -151,6 +151,21 @@ func (s *membershipBackend) MustSaveClusterVersionToBackend(ver *semver.Version)
 	tx.UnsafePut(Cluster, ckey, []byte(ver.String()))
 }
 
+// MustSaveClusterParamsToBackend saves cluster params to backend.
+// The field is populated since etcd v3.7.
+func (s *membershipBackend) MustSaveClusterParamsToBackend(clusterParams *membership.ClusterParams) {
+	pkey := ClusterClusterParamsKeyName
+	pvalue, err := json.Marshal(clusterParams)
+	if err != nil {
+		s.lg.Panic("failed to cluster params", zap.Error(err))
+	}
+
+	tx := s.be.BatchTx()
+	tx.LockInsideApply()
+	defer tx.Unlock()
+	tx.UnsafePut(Cluster, pkey, pvalue)
+}
+
 // MustSaveDowngradeToBackend saves downgrade info to backend.
 // The field is populated since etcd v3.5.
 func (s *membershipBackend) MustSaveDowngradeToBackend(downgrade *version.DowngradeInfo) {
@@ -235,4 +250,28 @@ func (s *membershipBackend) DowngradeInfoFromBackend() *version.DowngradeInfo {
 		}
 	}
 	return &d
+}
+
+// ClusterParamsFromBackend reads cluster params from backend.
+// The field is populated since etcd v3.7.
+func (s *membershipBackend) ClusterParamsFromBackend() *membership.ClusterParams {
+	pkey := ClusterClusterParamsKeyName
+	tx := s.be.ReadTx()
+	tx.RLock()
+	defer tx.RUnlock()
+	keys, vals := tx.UnsafeRange(Cluster, pkey, nil, 0)
+	if len(keys) == 0 {
+		return nil
+	}
+	if len(keys) != 1 {
+		s.lg.Panic(
+			"unexpected number of keys when getting cluster params from backend",
+			zap.Int("number-of-key", len(keys)),
+		)
+	}
+	var clusterParams membership.ClusterParams
+	if err := json.Unmarshal(vals[0], &clusterParams); err != nil {
+		s.lg.Panic("failed to unmarshal cluster params from backend", zap.Error(err))
+	}
+	return &clusterParams
 }

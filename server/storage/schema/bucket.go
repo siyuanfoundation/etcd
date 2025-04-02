@@ -80,6 +80,7 @@ var (
 	MetaTermKeyName              = []byte("term")
 	MetaConfStateName            = []byte("confState")
 	ClusterClusterVersionKeyName = []byte("clusterVersion")
+	ClusterClusterParamsKeyName  = []byte("clusterParams")
 	ClusterDowngradeKeyName      = []byte("downgrade")
 	// Since v3.6
 	MetaStorageVersionName = []byte("storageVersion")

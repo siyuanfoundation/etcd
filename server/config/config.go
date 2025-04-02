@@ -22,10 +22,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coreos/go-semver/semver"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.uber.org/zap"
 
 	bolt "go.etcd.io/bbolt"
+	"go.etcd.io/etcd/api/v3/membershippb"
+	"go.etcd.io/etcd/api/v3/version"
 	"go.etcd.io/etcd/client/pkg/v3/transport"
 	"go.etcd.io/etcd/client/pkg/v3/types"
 	"go.etcd.io/etcd/pkg/v3/featuregate"
@@ -367,4 +370,32 @@ func (c *ServerConfig) BackendPath() string { return datadir.ToBackendFileName(c
 
 func (c *ServerConfig) MaxRequestBytesWithOverhead() uint {
 	return c.MaxRequestBytes + grpcOverheadBytes
+}
+
+func (c *ServerConfig) ClusterParams(ver string, resetToDefault bool) (*membershippb.ClusterParams, error) {
+	parsedVer, err := semver.NewVersion(ver)
+	if err != nil {
+		return nil, err
+	}
+	if c.ClusterFeatureGate == nil {
+		c.Logger.Info("nil ClusterFeatureGate, skipping ClusterParams")
+	}
+	if parsedVer.LessThan(version.V3_7) {
+		c.Logger.Info("version less than 3.7, skipping ClusterParams")
+	}
+	if c.ClusterFeatureGate == nil || parsedVer.LessThan(version.V3_7) {
+		return nil, nil
+	}
+	clusterParams := membershippb.ClusterParams{}
+	fg := c.ClusterFeatureGate.DeepCopy()
+	if resetToDefault {
+		fg = fg.DeepCopyAndReset()
+	}
+	if err := fg.SetEmulationVersion(parsedVer); err != nil {
+		return nil, err
+	}
+	for k, _ := range fg.GetAll() {
+		clusterParams.FeatureGates = append(clusterParams.FeatureGates, &membershippb.Feature{Name: string(k), Enabled: fg.Enabled(k)})
+	}
+	return &clusterParams, nil
 }

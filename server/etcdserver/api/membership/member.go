@@ -17,6 +17,7 @@ package membership
 import (
 	"crypto/sha1"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -34,10 +35,32 @@ type RaftAttributes struct {
 	IsLearner bool `json:"isLearner,omitempty"`
 }
 
+type Feature struct {
+	Name string `json:"name,omitempty"`
+	// Enabled indicates if the feature is enabled.
+	Enabled bool `json:"enabled,omitempty"`
+}
+
+type ClusterParams struct {
+	FeatureGates map[string]bool `json:"featureGates,omitempty"`
+}
+
+func (c *ClusterParams) String() string {
+	if c == nil {
+		return ""
+	}
+	b, err := json.Marshal(c)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
+
 // Attributes represents all the non-raft related attributes of an etcd member.
 type Attributes struct {
-	Name       string   `json:"name,omitempty"`
-	ClientURLs []string `json:"clientURLs,omitempty"`
+	Name                  string         `json:"name,omitempty"`
+	ClientURLs            []string       `json:"clientURLs,omitempty"`
+	ProposedClusterParams *ClusterParams `json:"proposedClusterParams,omitempty"`
 }
 
 type Member struct {

@@ -414,17 +414,24 @@ func NewApplierMembership(lg *zap.Logger, cluster *membership.RaftCluster, snaps
 func (a *ApplierMembership) ClusterVersionSet(r *membershippb.ClusterVersionSetRequest, shouldApplyV3 membership.ShouldApplyV3) {
 	prevVersion := a.cluster.Version()
 	newVersion := semver.Must(semver.NewVersion(r.Ver))
+	prevClusterParams := a.cluster.ClusterParams()
 	a.cluster.SetVersion(newVersion, api.UpdateCapability, shouldApplyV3)
+	a.cluster.SetClusterParams(r.ClusterParams)
 	// Force snapshot after cluster version downgrade.
 	if prevVersion != nil && newVersion.LessThan(*prevVersion) {
 		lg := a.lg
 		if lg != nil {
-			lg.Info("Cluster version downgrade detected, forcing snapshot",
-				zap.String("prev-cluster-version", prevVersion.String()),
-				zap.String("new-cluster-version", newVersion.String()),
-			)
+			lg.Info("Cluster version downgrade detected, forcing snapshot")
 		}
 		a.snapshotServer.ForceSnapshot()
+	}
+	if a.lg != nil {
+		a.lg.Info("set cluster version",
+			zap.String("prev-cluster-version", prevVersion.String()),
+			zap.String("new-cluster-version", newVersion.String()),
+			zap.String("prev-cluster-params", prevClusterParams.String()),
+			zap.String("new-cluster-params", a.cluster.ClusterParams().String()),
+		)
 	}
 }
 
@@ -432,11 +439,19 @@ func (a *ApplierMembership) ClusterMemberAttrSet(r *membershippb.ClusterMemberAt
 	a.cluster.UpdateAttributes(
 		types.ID(r.Member_ID),
 		membership.Attributes{
-			Name:       r.MemberAttributes.Name,
-			ClientURLs: r.MemberAttributes.ClientUrls,
+			Name:                  r.MemberAttributes.Name,
+			ClientURLs:            r.MemberAttributes.ClientUrls,
+			ProposedClusterParams: membership.ClusterParamsPbToGo(r.MemberAttributes.ProposedClusterParams),
 		},
 		shouldApplyV3,
 	)
+}
+
+func (a *ApplierMembership) ClusterParamsSet(r *membershippb.ClusterParamsSetRequest) {
+	if a.cluster == nil {
+		return
+	}
+	a.cluster.SetClusterParams(r.ClusterParams)
 }
 
 func (a *ApplierMembership) DowngradeInfoSet(r *membershippb.DowngradeInfoSetRequest, shouldApplyV3 membership.ShouldApplyV3) {
