@@ -21,12 +21,25 @@ message RaftAttributes {
   bool is_learner = 2;
 }
 
+message Feature {
+  option (versionpb.etcd_version_msg) = "3.7";
+  string name = 1;
+  bool enabled = 2;
+}
+// Parameters that need consensus in the whole cluster to function properly.
+message ClusterParams {
+  option (versionpb.etcd_version_msg) = "3.7";
+  repeated Feature feature_gates = 1;
+}
+
 // Attributes represents all the non-raft related attributes of an etcd member.
 message Attributes {
   option (versionpb.etcd_version_msg) = "3.5";
 
   string name = 1;
   repeated string client_urls = 2;
+  // the values of all cluster level parameters set by the configuration of the member server.
+  ClusterParams proposed_cluster_params = 3 [(versionpb.etcd_version_field)="3.7"];
 }
 
 message Member {
@@ -37,10 +50,19 @@ message Member {
   Attributes member_attributes = 3;
 }
 
+message ClusterParamsSetRequest {
+  option (versionpb.etcd_version_msg) = "3.7";
+
+  // the consensus values of all cluster level parameters for the whole cluster.
+  ClusterParams cluster_params = 1;
+}
+
 message ClusterVersionSetRequest {
   option (versionpb.etcd_version_msg) = "3.5";
 
   string ver = 1;
+  // the default values of all cluster level parameters for the whole cluster at the cluster version.
+  ClusterParams cluster_params = 2 [(versionpb.etcd_version_field)="3.7"];
 }
 
 message ClusterMemberAttrSetRequest {
