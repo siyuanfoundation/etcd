@@ -635,13 +635,18 @@ func (f *featureGate) SetEmulationVersion(emulationVersion *semver.Version) erro
 	enabled := map[Feature]bool{}
 	errs := f.unsafeSetFromMap(enabled, enabledRaw, emulationVersion)
 
-	if len(errs) == 0 {
-		// Persist changes
-		f.enabled.Store(enabled)
-		f.emulationVersion.Store(emulationVersion)
-		return nil
+	// etcd cluster version can change during rolling upgrade/downgrade, it is ok to see unrecognized features
+	// when updating cluster version.
+	if len(errs) > 0 {
+		f.lg.Warn("failed to set some features at the new version",
+			zap.String("emulationVersion", emulationVersion.String()),
+			zap.Errors("errors", errs),
+		)
 	}
-	return aggregateError(errs)
+	// Persist changes
+	f.enabled.Store(enabled)
+	f.emulationVersion.Store(emulationVersion)
+	return nil
 }
 
 func (f *featureGate) EmulationVersion() *semver.Version {

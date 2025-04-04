@@ -82,9 +82,12 @@ const (
 	// main PR: https://github.com/etcd-io/etcd/pull/17661
 	SetMemberLocalAddr featuregate.Feature = "SetMemberLocalAddr"
 
-	// TestClusterFeature is for internal testing of cluster feature gate only.
+	// TestDefaultOffClusterFeature is for internal testing of cluster feature gate only.
 	// owner: @siyuanfoundation
-	TestClusterFeature featuregate.Feature = "TestClusterFeature"
+	TestDefaultOffClusterFeature featuregate.Feature = "TestDefaultOffClusterFeature"
+	// TestDefaultOnClusterFeature is for internal testing of cluster feature gate only.
+	// owner: @siyuanfoundation
+	TestDefaultOnClusterFeature featuregate.Feature = "TestDefaultOnClusterFeature"
 )
 
 var (
@@ -116,8 +119,11 @@ var (
 	}
 
 	DefaultEtcdClusterFeatureGates = map[featuregate.Feature]featuregate.VersionedSpecs{
-		TestClusterFeature: {
+		TestDefaultOffClusterFeature: {
 			{Version: &semver.Version{Major: 3, Minor: 7}, Default: false, PreRelease: featuregate.Alpha},
+		},
+		TestDefaultOnClusterFeature: {
+			{Version: &semver.Version{Major: 3, Minor: 7}, Default: true, PreRelease: featuregate.Beta},
 		},
 	}
 	// ExperimentalFlagToFeatureMap is the map from the cmd line flags of experimental features
