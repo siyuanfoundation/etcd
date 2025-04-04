@@ -109,6 +109,8 @@ Member:
     Write timeout set on each rafthttp connection
   --feature-gates ''
     A set of key=value pairs that describe server level feature gates for alpha/experimental features. Options are:` + "\n    " + strings.Join(features.NewDefaultServerFeatureGate("", nil).KnownFeatures(), "\n    ") + `
+  --cluster-feature-gates ''
+    A set of key=value pairs that describe cluster level feature gates for features. Options are:` + "\n    " + strings.Join(features.NewDefaultClusterFeatureGate("", nil).KnownFeatures(), "\n    ") + `
 
 Clustering:
   --initial-advertise-peer-urls 'http://localhost:2380'

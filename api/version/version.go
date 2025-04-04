@@ -43,10 +43,11 @@ var (
 	V3_5 = semver.Version{Major: 3, Minor: 5}
 	V3_6 = semver.Version{Major: 3, Minor: 6}
 	V3_7 = semver.Version{Major: 3, Minor: 7}
+	V3_8 = semver.Version{Major: 3, Minor: 8}
 	V4_0 = semver.Version{Major: 4, Minor: 0}
 
 	// AllVersions keeps all the versions in ascending order.
-	AllVersions = []semver.Version{V3_0, V3_1, V3_2, V3_3, V3_4, V3_5, V3_6, V3_7, V4_0}
+	AllVersions = []semver.Version{V3_0, V3_1, V3_2, V3_3, V3_4, V3_5, V3_6, V3_7, V3_8, V4_0}
 )
 
 func init() {

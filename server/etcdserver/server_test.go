@@ -1187,7 +1187,7 @@ func TestPublishV3(t *testing.T) {
 		ctx:        ctx,
 		cancel:     cancel,
 	}
-	srv.publishV3(time.Hour)
+	srv.publishV3(time.Hour, true)
 
 	action := n.Action()
 	if len(action) != 1 {
@@ -1231,7 +1231,7 @@ func TestPublishV3Stopped(t *testing.T) {
 		cancel: cancel,
 	}
 	close(srv.stopping)
-	srv.publishV3(time.Hour)
+	srv.publishV3(time.Hour, true)
 }
 
 // TestPublishV3Retry tests that publish will keep retry until success.
@@ -1279,7 +1279,7 @@ func TestPublishV3Retry(t *testing.T) {
 			}
 		}
 	}()
-	srv.publishV3(10 * time.Nanosecond)
+	srv.publishV3(10*time.Nanosecond, true)
 	ch <- struct{}{}
 	<-ch
 }

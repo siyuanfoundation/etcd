@@ -56,6 +56,20 @@ func (c *ClusterParams) String() string {
 	return string(b)
 }
 
+func (c *ClusterParams) Clone() *ClusterParams {
+	if c == nil {
+		return nil
+	}
+	cp := &ClusterParams{}
+	if c.FeatureGates != nil {
+		cp.FeatureGates = make(map[string]bool)
+		for k, v := range c.FeatureGates {
+			cp.FeatureGates[k] = v
+		}
+	}
+	return cp
+}
+
 // Attributes represents all the non-raft related attributes of an etcd member.
 type Attributes struct {
 	Name                  string         `json:"name,omitempty"`
@@ -120,7 +134,8 @@ func (m *Member) Clone() *Member {
 			IsLearner: m.IsLearner,
 		},
 		Attributes: Attributes{
-			Name: m.Name,
+			Name:                  m.Name,
+			ProposedClusterParams: m.ProposedClusterParams.Clone(),
 		},
 	}
 	if m.PeerURLs != nil {

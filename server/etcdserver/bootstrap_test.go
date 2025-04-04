@@ -141,7 +141,7 @@ func mockBootstrapRoundTrip(members []etcdserverpb.Member) roundTripFunc {
 }
 
 func mockVersionJSON() string {
-	v := version.Versions{Server: "3.7.0", Cluster: "3.7.0"}
+	v := version.Versions{Server: "3.8.0", Cluster: "3.8.0"}
 	version, _ := json.Marshal(v)
 	return string(version)
 }
