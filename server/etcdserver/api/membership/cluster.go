@@ -487,6 +487,13 @@ func (c *RaftCluster) RemoveMember(id types.ID, shouldApplyV3 ShouldApplyV3) {
 	}
 }
 
+func (c *RaftCluster) MemberAttributes(id types.ID) Attributes {
+	if m, ok := c.members[id]; ok {
+		return m.Attributes
+	}
+	return Attributes{}
+}
+
 func (c *RaftCluster) UpdateAttributes(id types.ID, attr Attributes, shouldApplyV3 ShouldApplyV3) {
 	c.Lock()
 	defer c.Unlock()
@@ -499,6 +506,17 @@ func (c *RaftCluster) UpdateAttributes(id types.ID, attr Attributes, shouldApply
 		if c.be != nil && shouldApplyV3 {
 			c.be.MustSaveMemberToBackend(m)
 		}
+		b, err := json.Marshal(m.Attributes)
+		if err != nil {
+			c.lg.Panic("failed to marshal attributes", zap.Error(err))
+		}
+		c.lg.Info(
+			"updated member attributes",
+			zap.String("cluster-id", c.cid.String()),
+			zap.String("local-member-id", c.localID.String()),
+			zap.String("remote-peer-id", id.String()),
+			zap.String("new-attributes", string(b)),
+		)
 		return
 	}
 
@@ -644,6 +662,7 @@ func (c *RaftCluster) ReconcileClusterParams() *membershippb.ClusterParams {
 		zap.String("local-member-id", c.localID.String()),
 		zap.String("current-cluster-params", c.ClusterParams().String()),
 	)
+
 	for _, member := range c.VotingMembers() {
 		c.lg.Info("member ProposedClusterParams",
 			zap.String("member-id", member.ID.String()),
@@ -699,12 +718,12 @@ func (c *RaftCluster) SetClusterParams(cp *membershippb.ClusterParams) {
 	c.lg.Info(
 		"set cluster params",
 		zap.String("cluster-id", c.cid.String()),
-		zap.String("cluster-params", c.ClusterParams().String()),
+		zap.String("cluster-params", clusterParams.String()),
 	)
 }
 
 func ClusterParamsPbToGo(r *membershippb.ClusterParams) *ClusterParams {
-	clusterParams := ClusterParams{}
+	clusterParams := ClusterParams{FeatureGates: make(map[string]bool)}
 	if r == nil || r.FeatureGates == nil {
 		return &clusterParams
 	}

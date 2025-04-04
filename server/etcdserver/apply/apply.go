@@ -421,14 +421,15 @@ func (a *ApplierMembership) ClusterVersionSet(r *membershippb.ClusterVersionSetR
 	if prevVersion != nil && newVersion.LessThan(*prevVersion) {
 		lg := a.lg
 		if lg != nil {
-			lg.Info("Cluster version downgrade detected, forcing snapshot")
+			lg.Info("Cluster version downgrade detected, forcing snapshot",
+				zap.String("prev-cluster-version", prevVersion.String()),
+				zap.String("new-cluster-version", newVersion.String()),
+			)
 		}
 		a.snapshotServer.ForceSnapshot()
 	}
 	if a.lg != nil {
-		a.lg.Info("set cluster version",
-			zap.String("prev-cluster-version", prevVersion.String()),
-			zap.String("new-cluster-version", newVersion.String()),
+		a.lg.Info("set cluster-params while updating cluster version",
 			zap.String("prev-cluster-params", prevClusterParams.String()),
 			zap.String("new-cluster-params", a.cluster.ClusterParams().String()),
 		)
@@ -436,6 +437,11 @@ func (a *ApplierMembership) ClusterVersionSet(r *membershippb.ClusterVersionSetR
 }
 
 func (a *ApplierMembership) ClusterMemberAttrSet(r *membershippb.ClusterMemberAttrSetRequest, shouldApplyV3 membership.ShouldApplyV3) {
+	if a.lg != nil {
+		a.lg.Info("set cluster member attributes",
+			zap.String("member-attributes", r.MemberAttributes.String()),
+		)
+	}
 	a.cluster.UpdateAttributes(
 		types.ID(r.Member_ID),
 		membership.Attributes{

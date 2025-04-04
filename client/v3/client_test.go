@@ -355,7 +355,7 @@ func TestMinSupportedVersion(t *testing.T) {
 		{
 			name:                "first minor version should accept its previous version",
 			currentVersion:      version.V4_0,
-			minSupportedVersion: version.V3_7,
+			minSupportedVersion: version.V3_8,
 		},
 		{
 			name:                "first version in list should not accept previous versions",

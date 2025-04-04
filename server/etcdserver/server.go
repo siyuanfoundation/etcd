@@ -23,6 +23,7 @@ import (
 	"math"
 	"net/http"
 	"path"
+	"reflect"
 	"regexp"
 	"strconv"
 	"sync"
@@ -541,7 +542,7 @@ func (s *EtcdServer) adjustTicks() {
 func (s *EtcdServer) Start() {
 	s.start()
 	s.GoAttach(func() { s.adjustTicks() })
-	s.GoAttach(func() { s.publishV3(s.Cfg.ReqTimeout()) })
+	s.GoAttach(func() { s.publishV3(s.Cfg.ReqTimeout(), true) })
 	s.GoAttach(s.purgeFile)
 	s.GoAttach(func() { monitorFileDescriptor(s.Logger(), s.stopping) })
 	s.GoAttach(s.monitorClusterVersions)
@@ -1767,12 +1768,17 @@ func (s *EtcdServer) configure(ctx context.Context, cc raftpb.ConfChange) ([]*me
 	}
 }
 
-func (s *EtcdServer) proposeClusterParams(timeout time.Duration) {
+func (s *EtcdServer) proposeClusterParams(shouldApplyV3 membership.ShouldApplyV3) {
 	if s.ClusterVersion() == nil || s.ClusterVersion().LessThan(semver.Version{Major: 3, Minor: 7}) {
 		return
 	}
-	s.lg.Info("proposing cluster parameters", zap.Duration("timeout", timeout))
-	s.publishV3(timeout)
+
+	if shouldApplyV3 {
+		s.GoAttach(func() {
+			s.lg.Info("proposing cluster parameters")
+			s.publishV3(30*time.Second, false)
+		})
+	}
 }
 
 // publishV3 registers server information into the cluster using v3 request. The
@@ -1780,7 +1786,7 @@ func (s *EtcdServer) proposeClusterParams(timeout time.Duration) {
 // with the static clientURLs of the server.
 // The function keeps attempting to register until it succeeds,
 // or its server is stopped.
-func (s *EtcdServer) publishV3(timeout time.Duration) {
+func (s *EtcdServer) publishV3(timeout time.Duration, closeReadyCh bool) {
 	req := &membershippb.ClusterMemberAttrSetRequest{
 		Member_ID: uint64(s.MemberID()),
 		MemberAttributes: &membershippb.Attributes{
@@ -1800,6 +1806,7 @@ func (s *EtcdServer) publishV3(timeout time.Duration) {
 			zap.String("proposed-cluster-params", proposedClusterParams.String()),
 		)
 		req.MemberAttributes.ProposedClusterParams = proposedClusterParams
+		s.attributes.ProposedClusterParams = membership.ClusterParamsPbToGo(proposedClusterParams)
 	}
 	// gofail: var beforePublishing struct{}
 	lg := s.Logger()
@@ -1817,12 +1824,20 @@ func (s *EtcdServer) publishV3(timeout time.Duration) {
 		default:
 		}
 
+		publishedMemberAttributes := s.cluster.MemberAttributes(s.memberID)
+		if reflect.DeepEqual(publishedMemberAttributes, s.attributes) {
+			lg.Info("skipping publish because the same member attributes are already published")
+			return
+		}
+
 		ctx, cancel := context.WithTimeout(s.ctx, timeout)
 		_, err := s.raftRequest(ctx, pb.InternalRaftRequest{ClusterMemberAttrSet: req})
 		cancel()
 		switch err {
 		case nil:
-			close(s.readych)
+			if closeReadyCh {
+				close(s.readych)
+			}
 			lg.Info(
 				"published local member to cluster through raft",
 				zap.String("local-member-id", s.MemberID().String()),
@@ -2047,12 +2062,12 @@ func (s *EtcdServer) applyInternalRaftRequest(r *pb.InternalRaftRequest, shouldA
 	case r.ClusterVersionSet != nil:
 		op = "ClusterVersionSet" // Implemented in 3.5.x
 		membershipApplier.ClusterVersionSet(r.ClusterVersionSet, shouldApplyV3)
-		s.proposeClusterParams(s.Cfg.ReqTimeout())
+		s.proposeClusterParams(shouldApplyV3)
 		return &apply.Result{}
 	case r.ClusterMemberAttrSet != nil:
 		op = "ClusterMemberAttrSet" // Implemented in 3.5.x
 		membershipApplier.ClusterMemberAttrSet(r.ClusterMemberAttrSet, shouldApplyV3)
-		s.updateClusterParams()
+		s.updateClusterParams(shouldApplyV3)
 	case r.ClusterParamsSet != nil:
 		op = "ClusterParamSet" // Implemented in 3.7.x
 		membershipApplier.ClusterParamsSet(r.ClusterParamsSet)
@@ -2071,8 +2086,11 @@ func (s *EtcdServer) applyInternalRaftRequest(r *pb.InternalRaftRequest, shouldA
 	return &apply.Result{}
 }
 
-func (s *EtcdServer) updateClusterParams() {
+func (s *EtcdServer) updateClusterParams(shouldApplyV3 membership.ShouldApplyV3) {
 	if s.ClusterVersion() == nil || s.ClusterVersion().LessThan(version.V3_7) {
+		return
+	}
+	if !shouldApplyV3 {
 		return
 	}
 	lg := s.Logger()
@@ -2090,7 +2108,7 @@ func (s *EtcdServer) updateClusterParams() {
 	)
 	req := membershippb.ClusterParamsSetRequest{ClusterParams: clusterParams}
 
-	ctx, cancel := context.WithTimeout(s.ctx, s.Cfg.ReqTimeout())
+	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
 	_, err := s.raftRequest(ctx, pb.InternalRaftRequest{ClusterParamsSet: &req})
 	cancel()
 
