@@ -665,11 +665,15 @@ func (c *RaftCluster) SetVersion(ver *semver.Version, onSet func(*zap.Logger, *s
 }
 
 func (c *RaftCluster) clusterParamsAtVersion(ver *semver.Version, clusterParams *ClusterParams) (*ClusterParams, error) {
-	if ver == nil || ver.LessThan(version.V3_7) || c.clusterFeatureGate == nil {
+	if ver == nil {
+		return nil, nil
+	}
+	majorMinor := &semver.Version{Major: ver.Major, Minor: ver.Minor}
+	if majorMinor.LessThan(version.V3_7) || c.clusterFeatureGate == nil {
 		return nil, nil
 	}
 	fg := c.clusterFeatureGate.(featuregate.MutableVersionedFeatureGate).DeepCopyAndReset()
-	fg.SetEmulationVersion(ver)
+	fg.SetEmulationVersion(majorMinor)
 	knownFeatures := fg.GetAll()
 	if clusterParams != nil && clusterParams.FeatureGates != nil {
 		for k, v := range clusterParams.FeatureGates {
@@ -690,7 +694,16 @@ func (c *RaftCluster) clusterParamsAtVersion(ver *semver.Version, clusterParams 
 // ReconcileClusterParams aggregates and reconciles the ProposedClusterParams from all members (if exist) at the given version to
 // ClusterParams to be set on the whole cluster.
 func (c *RaftCluster) ReconcileClusterParams(ver *semver.Version) *membershippb.ClusterParams {
-	if ver == nil || ver.LessThan(version.V3_7) {
+	if ver == nil {
+		return nil
+	}
+	majorMinor := &semver.Version{Major: ver.Major, Minor: ver.Minor}
+	if majorMinor.LessThan(version.V3_7) {
+		c.lg.Info("reconcile cluster params with low version",
+			zap.String("version", majorMinor.String()),
+			zap.String("cluster-id", c.cid.String()),
+			zap.String("local-member-id", c.localID.String()),
+		)
 		return nil
 	}
 	if c.clusterFeatureGate == nil {
@@ -714,7 +727,7 @@ func (c *RaftCluster) ReconcileClusterParams(ver *semver.Version) *membershippb.
 			zap.String("member-proposed-cluster-params", member.Attributes.ProposedClusterParams.String()),
 		)
 		if member.Attributes.ProposedClusterParams != nil {
-			if cp, err := c.clusterParamsAtVersion(ver, member.Attributes.ProposedClusterParams); err != nil {
+			if cp, err := c.clusterParamsAtVersion(majorMinor, member.Attributes.ProposedClusterParams); err != nil {
 				c.lg.Panic("failed to get cluster params at version", zap.Error(err),
 					zap.String("member-id", member.ID.String()),
 					zap.String("member-proposed-cluster-params", member.Attributes.ProposedClusterParams.String()),
@@ -727,7 +740,7 @@ func (c *RaftCluster) ReconcileClusterParams(ver *semver.Version) *membershippb.
 
 	if len(clusterParamsList) == 0 {
 		// Adding default
-		if cp, err := c.clusterParamsAtVersion(ver, nil); err != nil {
+		if cp, err := c.clusterParamsAtVersion(majorMinor, nil); err != nil {
 			c.lg.Panic("failed to get default cluster params at version", zap.Error(err))
 		} else {
 			clusterParamsList = append(clusterParamsList, cp)
@@ -773,10 +786,19 @@ func (c *RaftCluster) ClusterParams() *ClusterParams {
 	return c.clusterPrams
 }
 
-func (c *RaftCluster) SetClusterParams(cp *membershippb.ClusterParams) {
+func (c *RaftCluster) SetClusterParams(newParams, prevParams *membershippb.ClusterParams) {
 	c.Lock()
 	defer c.Unlock()
-	clusterParams := ClusterParamsPbToGo(cp)
+	prevClusterParams := ClusterParamsPbToGo(prevParams)
+	if !c.clusterPrams.Equal(prevClusterParams) {
+		c.lg.Panic("current clusterPrams is not the same as the one seen by the leader. Make sure you are not starting a new cluster with mixed versions!",
+			zap.String("cluster-id", c.cid.String()),
+			zap.String("local-member-id", c.localID.String()),
+			zap.String("local-current-cluster-params", c.clusterPrams.String()),
+			zap.String("leader-current-cluster-params", prevClusterParams.String()),
+		)
+	}
+	clusterParams := ClusterParamsPbToGo(newParams)
 	c.clusterPrams = clusterParams
 	if c.be != nil {
 		c.be.MustSaveClusterParamsToBackend(clusterParams)

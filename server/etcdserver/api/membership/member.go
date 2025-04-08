@@ -19,6 +19,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -83,6 +84,22 @@ func (c *ClusterParams) ToProto() *membershippb.ClusterParams {
 		ret.FeatureGates = append(ret.FeatureGates, &membershippb.Feature{Name: k, Enabled: v})
 	}
 	return &ret
+}
+
+func (c *ClusterParams) Equal(other *ClusterParams) bool {
+	if c == nil && other == nil {
+		return true
+	}
+	if c == nil {
+		return other.FeatureGates == nil || len(other.FeatureGates) == 0
+	}
+	if other == nil {
+		return other.Equal(c)
+	}
+	if c.FeatureGates == nil || len(c.FeatureGates) == 0 {
+		return other.FeatureGates == nil || len(other.FeatureGates) == 0
+	}
+	return reflect.DeepEqual(c.FeatureGates, other.FeatureGates)
 }
 
 // Attributes represents all the non-raft related attributes of an etcd member.

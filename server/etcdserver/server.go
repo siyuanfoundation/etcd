@@ -2408,7 +2408,7 @@ func (s *EtcdServer) updateClusterVersionV3(ver string) {
 		)
 	}
 
-	req := membershippb.ClusterVersionSetRequest{Ver: ver, ClusterParams: clusterParams}
+	req := membershippb.ClusterVersionSetRequest{Ver: ver, ClusterParams: clusterParams, PreviousClusterParams: s.ClusterParams().ToProto()}
 
 	ctx, cancel := context.WithTimeout(s.ctx, s.Cfg.ReqTimeout())
 	_, err := s.raftRequest(ctx, pb.InternalRaftRequest{ClusterVersionSet: &req})
