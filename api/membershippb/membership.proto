@@ -50,19 +50,15 @@ message Member {
   Attributes member_attributes = 3;
 }
 
-message ClusterParamsSetRequest {
-  option (versionpb.etcd_version_msg) = "3.7";
-
-  // the consensus values of all cluster level parameters for the whole cluster.
-  ClusterParams cluster_params = 1;
-}
-
 message ClusterVersionSetRequest {
   option (versionpb.etcd_version_msg) = "3.5";
 
   string ver = 1;
-  // the default values of all cluster level parameters for the whole cluster at the cluster version.
+  // cluster level parameters for the whole cluster at the cluster version.
   ClusterParams cluster_params = 2 [(versionpb.etcd_version_field)="3.7"];
+  // the cluster_params before setting the new cluster_params.
+  // used to verify compatibility of cluster_params change w.r.t. local initial cluster_params.
+  ClusterParams previous_cluster_params = 3 [(versionpb.etcd_version_field)="3.7"];
 }
 
 message ClusterMemberAttrSetRequest {

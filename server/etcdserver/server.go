@@ -2029,7 +2029,7 @@ func (s *EtcdServer) applyEntryNormal(e *raftpb.Entry, shouldApplyV3 membership.
 }
 
 func (s *EtcdServer) applyInternalRaftRequest(r *pb.InternalRaftRequest, shouldApplyV3 membership.ShouldApplyV3) *apply.Result {
-	if r.ClusterVersionSet == nil && r.ClusterMemberAttrSet == nil && r.ClusterParamsSet == nil && r.DowngradeInfoSet == nil && r.DowngradeVersionTest == nil {
+	if r.ClusterVersionSet == nil && r.ClusterMemberAttrSet == nil && r.DowngradeInfoSet == nil && r.DowngradeVersionTest == nil {
 		if !shouldApplyV3 {
 			return nil
 		}
@@ -2049,9 +2049,6 @@ func (s *EtcdServer) applyInternalRaftRequest(r *pb.InternalRaftRequest, shouldA
 	case r.ClusterMemberAttrSet != nil:
 		op = "ClusterMemberAttrSet" // Implemented in 3.5.x
 		membershipApplier.ClusterMemberAttrSet(r.ClusterMemberAttrSet, shouldApplyV3)
-	case r.ClusterParamsSet != nil:
-		op = "ClusterParamSet" // Implemented in 3.7.x
-		membershipApplier.ClusterParamsSet(r.ClusterParamsSet)
 	case r.DowngradeInfoSet != nil:
 		op = "DowngradeInfoSet" // Implemented in 3.5.x
 		membershipApplier.DowngradeInfoSet(r.DowngradeInfoSet, shouldApplyV3)
@@ -2066,46 +2063,6 @@ func (s *EtcdServer) applyInternalRaftRequest(r *pb.InternalRaftRequest, shouldA
 	}
 	return &apply.Result{}
 }
-
-// func (s *EtcdServer) updateClusterParams(shouldApplyV3 membership.ShouldApplyV3) {
-// 	if s.ClusterVersion() == nil || s.ClusterVersion().LessThan(version.V3_7) {
-// 		return
-// 	}
-// 	if !shouldApplyV3 {
-// 		return
-// 	}
-// 	lg := s.Logger()
-// 	if !s.isLeader() {
-// 		return
-// 	}
-// 	clusterParams := s.cluster.ReconcileClusterParams(s.ClusterVersion())
-// 	if clusterParams == nil {
-// 		lg.Info("cluster params is nil after reconcilation", zap.String("member-id", s.MemberID().String()))
-// 		return
-// 	}
-// 	lg.Info("request updating cluster params",
-// 		zap.String("member-id", s.MemberID().String()),
-// 		zap.String("cluster-params", clusterParams.String()),
-// 	)
-// 	req := membershippb.ClusterParamsSetRequest{ClusterParams: clusterParams}
-
-// 	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
-// 	_, err := s.raftRequest(ctx, pb.InternalRaftRequest{ClusterParamsSet: &req})
-// 	cancel()
-
-// 	switch {
-// 	case errorspkg.Is(err, nil):
-// 		lg.Info("cluster params is updated", zap.String("cluster-params", clusterParams.String()))
-// 		return
-
-// 	case errorspkg.Is(err, errors.ErrStopped):
-// 		lg.Warn("aborting cluster params update; server is stopped", zap.Error(err))
-// 		return
-
-// 	default:
-// 		lg.Warn("failed to update cluster params", zap.Error(err))
-// 	}
-// }
 
 func noSideEffect(r *pb.InternalRaftRequest) bool {
 	return r.Range != nil || r.AuthUserGet != nil || r.AuthRoleGet != nil || r.AuthStatus != nil

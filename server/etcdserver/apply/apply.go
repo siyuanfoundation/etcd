@@ -453,13 +453,6 @@ func (a *ApplierMembership) ClusterMemberAttrSet(r *membershippb.ClusterMemberAt
 	)
 }
 
-func (a *ApplierMembership) ClusterParamsSet(r *membershippb.ClusterParamsSetRequest) {
-	if a.cluster == nil {
-		return
-	}
-	a.cluster.SetClusterParams(r.ClusterParams)
-}
-
 func (a *ApplierMembership) DowngradeInfoSet(r *membershippb.DowngradeInfoSetRequest, shouldApplyV3 membership.ShouldApplyV3) {
 	d := version.DowngradeInfo{Enabled: false}
 	if r.Enabled {
