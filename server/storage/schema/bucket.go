@@ -80,10 +80,11 @@ var (
 	MetaTermKeyName              = []byte("term")
 	MetaConfStateName            = []byte("confState")
 	ClusterClusterVersionKeyName = []byte("clusterVersion")
-	ClusterClusterParamsKeyName  = []byte("clusterParams")
 	ClusterDowngradeKeyName      = []byte("downgrade")
 	// Since v3.6
 	MetaStorageVersionName = []byte("storageVersion")
+	// Since 3.7
+	ClusterClusterParamsKeyName = []byte("clusterParams")
 	// Before adding new meta key please update server/etcdserver/version
 )
 

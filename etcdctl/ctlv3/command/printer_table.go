@@ -67,3 +67,14 @@ func (tp *tablePrinter) EndpointHashKV(r []epHashKV) {
 	table.SetAlignment(tablewriter.ALIGN_RIGHT)
 	table.Render()
 }
+
+func (tp *tablePrinter) EndpointClusterFeatureStatus(r []epClusterFeatureStatus) {
+	hdr, rows := makeEndpointClusterFeatureStatusTable(r)
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader(hdr)
+	for _, row := range rows {
+		table.Append(row)
+	}
+	table.SetAlignment(tablewriter.ALIGN_RIGHT)
+	table.Render()
+}

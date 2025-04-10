@@ -55,7 +55,7 @@ type RaftCluster struct {
 	version    *semver.Version
 	members    map[types.ID]*Member
 
-	clusterPrams       *ClusterParams
+	clusterParams      *ClusterParams
 	clusterFeatureGate featuregate.FeatureGate
 
 	// removed contains the ids of removed members in the cluster.
@@ -266,7 +266,16 @@ func (c *RaftCluster) UnsafeLoad() {
 	if c.be != nil {
 		c.version = c.be.ClusterVersionFromBackend()
 		c.members, c.removed = c.be.MustReadMembersFromBackend()
-		c.clusterPrams = c.be.ClusterParamsFromBackend()
+		// if cluster version is not set, keep the clusterParams to local default.
+		if c.version != nil {
+			c.clusterParams = c.be.ClusterParamsFromBackend()
+			c.lg.Info("sizhangDebug: read cluster params from backend",
+				zap.String("cluster-params", c.clusterParams.String()),
+				zap.String("cluster-version", c.version.String()),
+			)
+		} else {
+			c.lg.Info("sizhangDebug: keeping original cluster params", zap.String("cluster-params", c.clusterParams.String()))
+		}
 	} else {
 		c.version = clusterVersionFromStore(c.lg, c.v2store)
 		c.members, c.removed = membersFromStore(c.lg, c.v2store)
@@ -316,10 +325,10 @@ func (c *RaftCluster) Recover(onSet func(*zap.Logger, *semver.Version)) {
 			zap.String("cluster-version", version.Cluster(c.version.String())),
 		)
 	}
-	if c.clusterPrams != nil {
+	if c.clusterParams != nil {
 		c.lg.Info(
 			"set cluster params from store",
-			zap.String("cluster-params", c.clusterPrams.String()),
+			zap.String("cluster-params", c.clusterParams.String()),
 		)
 	}
 }
@@ -525,6 +534,7 @@ func (c *RaftCluster) UpdateAttributes(id types.ID, attr Attributes, shouldApply
 			zap.String("local-member-id", c.localID.String()),
 			zap.String("remote-peer-id", id.String()),
 			zap.String("new-attributes", string(b)),
+			zap.String("new-proposed-cluster-params", m.Attributes.ProposedClusterParams.String()),
 		)
 		return
 	}
@@ -695,6 +705,7 @@ func (c *RaftCluster) clusterParamsAtVersion(ver *semver.Version, clusterParams 
 // ClusterParams to be set on the whole cluster.
 func (c *RaftCluster) ReconcileClusterParams(ver *semver.Version) *membershippb.ClusterParams {
 	if ver == nil {
+		c.lg.Info("sizhangDebug: nil ver in ReconcileClusterParams")
 		return nil
 	}
 	majorMinor := &semver.Version{Major: ver.Major, Minor: ver.Minor}
@@ -780,27 +791,38 @@ func (c *RaftCluster) SetClusterFeatureGate(fg featuregate.FeatureGate) {
 	c.clusterFeatureGate = fg
 }
 
+// FeatureEnabled checks if a feature is enabled for the whole cluster.
+func (c *RaftCluster) FeatureEnabled(feature string) bool {
+	if c.clusterParams == nil || c.clusterParams.FeatureGates == nil {
+		return false
+	}
+	if val, ok := c.clusterParams.FeatureGates[feature]; ok {
+		return val
+	}
+	return false
+}
+
 func (c *RaftCluster) ClusterParams() *ClusterParams {
 	c.Lock()
 	defer c.Unlock()
-	return c.clusterPrams
+	return c.clusterParams
 }
 
-func (c *RaftCluster) SetClusterParams(newParams, prevParams *membershippb.ClusterParams) {
+func (c *RaftCluster) SetClusterParams(newParams, prevParams *membershippb.ClusterParams, saveToBackend bool) {
 	c.Lock()
 	defer c.Unlock()
 	prevClusterParams := ClusterParamsPbToGo(prevParams)
-	if !c.clusterPrams.Equal(prevClusterParams) {
+	if !c.clusterParams.Equal(prevClusterParams) {
 		c.lg.Panic("current clusterPrams is not the same as the one seen by the leader. Make sure you are not starting a new cluster with mixed versions!",
 			zap.String("cluster-id", c.cid.String()),
 			zap.String("local-member-id", c.localID.String()),
-			zap.String("local-current-cluster-params", c.clusterPrams.String()),
+			zap.String("local-current-cluster-params", c.clusterParams.String()),
 			zap.String("leader-current-cluster-params", prevClusterParams.String()),
 		)
 	}
 	clusterParams := ClusterParamsPbToGo(newParams)
-	c.clusterPrams = clusterParams
-	if c.be != nil {
+	c.clusterParams = clusterParams
+	if c.be != nil && saveToBackend {
 		c.be.MustSaveClusterParamsToBackend(clusterParams)
 	}
 	c.lg.Info(

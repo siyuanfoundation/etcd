@@ -179,3 +179,8 @@ func (cp *clusterProxy) MemberPromote(ctx context.Context, r *pb.MemberPromoteRe
 	// TODO: implement
 	return nil, errors.New("not implemented")
 }
+
+func (cp *clusterProxy) ClusterFeatureStatus(ctx context.Context, r *pb.ClusterFeatureStatusRequest) (*pb.ClusterFeatureStatusResponse, error) {
+	// TODO: implement
+	return nil, errors.New("not implemented")
+}

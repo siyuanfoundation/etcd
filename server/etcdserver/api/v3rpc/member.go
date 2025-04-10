@@ -16,9 +16,11 @@ package v3rpc
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	pb "go.etcd.io/etcd/api/v3/etcdserverpb"
+	"go.etcd.io/etcd/api/v3/membershippb"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	"go.etcd.io/etcd/client/pkg/v3/types"
 	"go.etcd.io/etcd/server/v3/etcdserver"
@@ -103,6 +105,31 @@ func (cs *ClusterServer) MemberPromote(ctx context.Context, r *pb.MemberPromoteR
 		return nil, togRPCError(err)
 	}
 	return &pb.MemberPromoteResponse{Header: cs.header(), Members: membersToProtoMembers(membs)}, nil
+}
+
+func (cs *ClusterServer) ClusterFeatureStatus(ctx context.Context, r *pb.ClusterFeatureStatusRequest) (*pb.ClusterFeatureStatusResponse, error) {
+	if r.Linearizable {
+		if err := cs.server.LinearizableReadNotify(ctx); err != nil {
+			return nil, togRPCError(err)
+		}
+	}
+	clusterParams := cs.cluster.ClusterParams()
+	if clusterParams == nil || clusterParams.FeatureGates == nil {
+		return &pb.ClusterFeatureStatusResponse{Header: cs.header()}, nil
+	}
+	features := []*membershippb.Feature{}
+	for _, feature := range r.Features {
+		features = append(features, &membershippb.Feature{Name: feature, Enabled: clusterParams.FeatureGates[feature]})
+	}
+	if len(features) == 0 {
+		for k, v := range clusterParams.FeatureGates {
+			features = append(features, &membershippb.Feature{Name: k, Enabled: v})
+		}
+	}
+	sort.Slice(features, func(i, j int) bool {
+		return features[i].Name < features[j].Name
+	})
+	return &pb.ClusterFeatureStatusResponse{Header: cs.header(), Features: features}, nil
 }
 
 func (cs *ClusterServer) header() *pb.ResponseHeader {

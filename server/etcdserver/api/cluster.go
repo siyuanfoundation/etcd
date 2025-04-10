@@ -35,4 +35,5 @@ type Cluster interface {
 	Member(id types.ID) *membership.Member
 	// Version is the cluster-wide minimum major.minor version.
 	Version() *semver.Version
+	ClusterParams() *membership.ClusterParams
 }

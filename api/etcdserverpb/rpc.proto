@@ -2,6 +2,7 @@ syntax = "proto3";
 package etcdserverpb;
 
 import "gogoproto/gogo.proto";
+import "etcd/api/membershippb/membership.proto";
 import "etcd/api/mvccpb/kv.proto";
 import "etcd/api/authpb/auth.proto";
 import "etcd/api/versionpb/version.proto";
@@ -196,6 +197,14 @@ service Cluster {
         body: "*"
     };
   }
+
+  // ClusterFeatures returns if a list features are enabled for the whole cluster.
+  rpc ClusterFeatureStatus(ClusterFeatureStatusRequest) returns (ClusterFeatureStatusResponse) {
+    option (google.api.http) = {
+      post: "/v3/cluster/featurestatus"
+      body: "*"
+  };
+}
 }
 
 service Maintenance {
@@ -1064,6 +1073,21 @@ message MemberPromoteResponse {
   ResponseHeader header = 1;
   // members is a list of all members after promoting the member.
   repeated Member members = 2;
+}
+
+message ClusterFeatureStatusRequest {
+  option (versionpb.etcd_version_msg) = "3.7";
+
+  // if empty, returns the status of all features.
+  repeated string features = 1;
+  bool linearizable = 2;
+}
+
+message ClusterFeatureStatusResponse {
+  option (versionpb.etcd_version_msg) = "3.7";
+
+  ResponseHeader header = 1;
+  repeated membershippb.Feature features = 2;
 }
 
 message DefragmentRequest {

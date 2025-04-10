@@ -415,8 +415,10 @@ func (a *ApplierMembership) ClusterVersionSet(r *membershippb.ClusterVersionSetR
 	prevVersion := a.cluster.Version()
 	newVersion := semver.Must(semver.NewVersion(r.Ver))
 	prevClusterParams := a.cluster.ClusterParams()
+	if shouldApplyV3 {
+		a.cluster.SetClusterParams(r.ClusterParams, r.PreviousClusterParams, true)
+	}
 	a.cluster.SetVersion(newVersion, api.UpdateCapability, shouldApplyV3)
-	a.cluster.SetClusterParams(r.ClusterParams, r.PreviousClusterParams)
 	// Force snapshot after cluster version downgrade.
 	if prevVersion != nil && newVersion.LessThan(*prevVersion) {
 		lg := a.lg

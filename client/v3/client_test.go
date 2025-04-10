@@ -511,3 +511,7 @@ func (mc *mockCluster) MemberUpdate(ctx context.Context, id uint64, peerAddrs []
 func (mc *mockCluster) MemberPromote(ctx context.Context, id uint64) (*MemberPromoteResponse, error) {
 	return nil, nil
 }
+
+func (mc *mockCluster) ClusterFeatureStatus(ctx context.Context, features []string, opts ...OpOption) (*ClusterFeatureStatusResponse, error) {
+	return nil, nil
+}

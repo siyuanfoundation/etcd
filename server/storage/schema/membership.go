@@ -149,6 +149,7 @@ func (s *membershipBackend) MustSaveClusterVersionToBackend(ver *semver.Version)
 	tx.LockInsideApply()
 	defer tx.Unlock()
 	tx.UnsafePut(Cluster, ckey, []byte(ver.String()))
+	s.lg.Info("sizhangDebug: SaveClusterVersionToBackend %s", zap.String("cluster-version", ver.String()))
 }
 
 // MustSaveClusterParamsToBackend saves cluster params to backend.
@@ -159,6 +160,8 @@ func (s *membershipBackend) MustSaveClusterParamsToBackend(clusterParams *member
 	if err != nil {
 		s.lg.Panic("failed to cluster params", zap.Error(err))
 	}
+
+	s.lg.Info("sizhangDebug: SaveClusterParamsToBackend", zap.String("cluster-params", string(pvalue)))
 
 	tx := s.be.BatchTx()
 	tx.LockInsideApply()
@@ -214,6 +217,7 @@ func (s *membershipBackend) ClusterVersionFromBackend() *semver.Version {
 			zap.Int("number-of-key", len(keys)),
 		)
 	}
+	s.lg.Info("sizhangDebug: ClusterVersionFromBackend", zap.String("cluster-version", string(vals[0])))
 	return semver.Must(semver.NewVersion(string(vals[0])))
 }
 
@@ -261,6 +265,7 @@ func (s *membershipBackend) ClusterParamsFromBackend() *membership.ClusterParams
 	defer tx.RUnlock()
 	keys, vals := tx.UnsafeRange(Cluster, pkey, nil, 0)
 	if len(keys) == 0 {
+		s.lg.Info("sizhangDebug: nil ClusterParams key in backend")
 		return nil
 	}
 	if len(keys) != 1 {
@@ -270,8 +275,13 @@ func (s *membershipBackend) ClusterParamsFromBackend() *membership.ClusterParams
 		)
 	}
 	var clusterParams membership.ClusterParams
-	if err := json.Unmarshal(vals[0], &clusterParams); err != nil {
-		s.lg.Panic("failed to unmarshal cluster params from backend", zap.Error(err))
+	if len(vals[0]) == 0 {
+		s.lg.Info("sizhangDebug: empty ClusterParams in backend")
+		return &clusterParams
 	}
+	if err := json.Unmarshal(vals[0], &clusterParams); err != nil {
+		s.lg.Panic("failed to unmarshal cluster params from backend", zap.Error(err), zap.String("value", string(vals[0])))
+	}
+	s.lg.Info("sizhangDebug: unmarshaled cluster params from backend", zap.String("cluster-params", clusterParams.String()))
 	return &clusterParams
 }

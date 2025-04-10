@@ -66,6 +66,7 @@ func (m *Monitor) UpdateClusterVersionIfNeeded() error {
 // New cluster version is based on the members versions server and whether cluster is downgrading.
 // Returns nil if cluster version should be left unchanged.
 func (m *Monitor) decideClusterVersion() (*semver.Version, error) {
+
 	clusterVersion := m.s.GetClusterVersion()
 	minimalServerVersion := m.membersMinimalServerVersion()
 	if clusterVersion == nil {
@@ -101,7 +102,7 @@ func (m *Monitor) decideClusterVersion() (*semver.Version, error) {
 	if clusterVersion.LessThan(*minimalServerVersion) && IsValidClusterVersionChange(clusterVersion, minimalServerVersion) {
 		return minimalServerVersion, nil
 	}
-	if clusterVersion.Equal(*minimalServerVersion) && m.s.NeedUpdateClusterParams(minimalServerVersion) {
+	if m.s.NeedUpdateClusterParams(minimalServerVersion) {
 		return minimalServerVersion, nil
 	}
 	return nil, nil

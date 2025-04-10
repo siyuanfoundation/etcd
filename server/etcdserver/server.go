@@ -2274,6 +2274,13 @@ func (s *EtcdServer) ClusterVersion() *semver.Version {
 	return s.cluster.Version()
 }
 
+func (s *EtcdServer) ClusterFeatureEnabled(feature string) bool {
+	if s.cluster == nil {
+		return false
+	}
+	return s.cluster.FeatureEnabled(feature)
+}
+
 func (s *EtcdServer) ClusterParams() *membership.ClusterParams {
 	if s.cluster == nil {
 		return nil
@@ -2390,7 +2397,7 @@ func (s *EtcdServer) updateClusterVersionV3(ver string) {
 	var clusterParams *membershippb.ClusterParams
 	if s.cluster.Version() == nil {
 		// use local default if cluster version is not decided from member versions.
-		clusterParams := s.ClusterParams().ToProto()
+		clusterParams = s.ClusterParams().ToProto()
 		lg.Info(
 			"setting up initial cluster version using v3 API",
 			zap.String("cluster-version", version.Cluster(ver)),
@@ -2409,6 +2416,11 @@ func (s *EtcdServer) updateClusterVersionV3(ver string) {
 	}
 
 	req := membershippb.ClusterVersionSetRequest{Ver: ver, ClusterParams: clusterParams, PreviousClusterParams: s.ClusterParams().ToProto()}
+
+	lg.Info("sizhangDebug: sending cluster version update",
+		zap.String("cluster-version", ver),
+		zap.String("cluster-params", clusterParams.String()),
+	)
 
 	ctx, cancel := context.WithTimeout(s.ctx, s.Cfg.ReqTimeout())
 	_, err := s.raftRequest(ctx, pb.InternalRaftRequest{ClusterVersionSet: &req})
