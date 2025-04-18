@@ -101,7 +101,7 @@ func (c *ClusterParams) Equal(other *ClusterParams) bool {
 	if other == nil {
 		return other.Equal(c)
 	}
-	if (c.MinCompatibilityVersion == nil && other.MinCompatibilityVersion != nil) || (c.MinCompatibilityVersion == nil && other.MinCompatibilityVersion != nil) {
+	if (c.MinCompatibilityVersion == nil && other.MinCompatibilityVersion != nil) || (c.MinCompatibilityVersion != nil && other.MinCompatibilityVersion == nil) {
 		return false
 	} else if !c.MinCompatibilityVersion.Equal(*other.MinCompatibilityVersion) {
 		return false

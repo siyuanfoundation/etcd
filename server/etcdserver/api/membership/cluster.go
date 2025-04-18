@@ -829,18 +829,9 @@ func (c *RaftCluster) ClusterParams() *ClusterParams {
 	return c.clusterParams
 }
 
-func (c *RaftCluster) SetClusterParams(newParams, prevParams *membershippb.ClusterParams, saveToBackend bool) {
+func (c *RaftCluster) SetClusterParams(newParams *membershippb.ClusterParams, saveToBackend bool) {
 	c.Lock()
 	defer c.Unlock()
-	prevClusterParams := ClusterParamsPbToGo(prevParams)
-	if !c.clusterParams.Equal(prevClusterParams) {
-		c.lg.Panic("current clusterPrams is not the same as the one seen by the leader. Make sure you are not starting a new cluster with mixed versions!",
-			zap.String("cluster-id", c.cid.String()),
-			zap.String("local-member-id", c.localID.String()),
-			zap.String("local-current-cluster-params", c.clusterParams.String()),
-			zap.String("leader-current-cluster-params", prevClusterParams.String()),
-		)
-	}
 	clusterParams := ClusterParamsPbToGo(newParams)
 	c.clusterParams = clusterParams
 	if c.be != nil && saveToBackend {

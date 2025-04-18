@@ -59,9 +59,6 @@ message ClusterVersionSetRequest {
   string ver = 1;
   // cluster level parameters for the whole cluster at the cluster version.
   ClusterParams cluster_params = 2 [(versionpb.etcd_version_field)="3.7"];
-  // the cluster_params before setting the new cluster_params.
-  // used to verify compatibility of cluster_params change w.r.t. local initial cluster_params.
-  ClusterParams previous_cluster_params = 3 [(versionpb.etcd_version_field)="3.7"];
 }
 
 message ClusterMemberAttrSetRequest {

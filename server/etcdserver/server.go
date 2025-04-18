@@ -2415,7 +2415,7 @@ func (s *EtcdServer) updateClusterVersionV3(ver string) {
 		)
 	}
 
-	req := membershippb.ClusterVersionSetRequest{Ver: ver, ClusterParams: clusterParams, PreviousClusterParams: s.ClusterParams().ToProto()}
+	req := membershippb.ClusterVersionSetRequest{Ver: ver, ClusterParams: clusterParams}
 
 	lg.Info("sizhangDebug: sending cluster version update",
 		zap.String("cluster-version", ver),

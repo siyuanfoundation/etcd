@@ -290,7 +290,7 @@ func bootstrapCluster(cfg config.ServerConfig, bwal *bootstrappedWAL, prt http.R
 	if err != nil {
 		return nil, err
 	}
-	c.cl.SetClusterParams(clusterParams, nil, false)
+	c.cl.SetClusterParams(clusterParams, false)
 	if clusterParams != nil {
 		cfg.Logger.Info(
 			"sizhangDebug: bootstrap cluster params",
