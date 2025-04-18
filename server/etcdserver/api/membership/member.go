@@ -17,11 +17,15 @@ package membership
 import (
 	"crypto/sha1"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/coreos/go-semver/semver"
+	"go.etcd.io/etcd/api/v3/membershippb"
 	"go.etcd.io/etcd/client/pkg/v3/types"
 )
 
@@ -34,10 +38,85 @@ type RaftAttributes struct {
 	IsLearner bool `json:"isLearner,omitempty"`
 }
 
+type Feature struct {
+	Name string `json:"name,omitempty"`
+	// Enabled indicates if the feature is enabled.
+	Enabled bool `json:"enabled,omitempty"`
+}
+
+type ClusterParams struct {
+	MinCompatibilityVersion *semver.Version `json:"minCompatibilityVersion,omitempty"`
+	FeatureGates            map[string]bool `json:"featureGates,omitempty"`
+}
+
+func (c *ClusterParams) String() string {
+	if c == nil {
+		return ""
+	}
+	b, err := json.Marshal(c)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
+
+func (c *ClusterParams) Clone() *ClusterParams {
+	if c == nil {
+		return nil
+	}
+	cp := &ClusterParams{MinCompatibilityVersion: &semver.Version{Major: c.MinCompatibilityVersion.Major, Minor: c.MinCompatibilityVersion.Minor}}
+	if c.FeatureGates != nil {
+		cp.FeatureGates = make(map[string]bool)
+		for k, v := range c.FeatureGates {
+			cp.FeatureGates[k] = v
+		}
+	}
+	return cp
+}
+
+func (c *ClusterParams) ToProto() *membershippb.ClusterParams {
+	if c == nil {
+		return nil
+	}
+	ret := membershippb.ClusterParams{}
+	if c.MinCompatibilityVersion != nil {
+		ret.MinCompatibilityVersion = c.MinCompatibilityVersion.String()
+	}
+	if c.FeatureGates == nil {
+		return &ret
+	}
+	for k, v := range c.FeatureGates {
+		ret.FeatureGates = append(ret.FeatureGates, &membershippb.Feature{Name: k, Enabled: v})
+	}
+	return &ret
+}
+
+func (c *ClusterParams) Equal(other *ClusterParams) bool {
+	if c == nil && other == nil {
+		return true
+	}
+	if c == nil {
+		return (other.FeatureGates == nil || len(other.FeatureGates) == 0) && other.MinCompatibilityVersion == nil
+	}
+	if other == nil {
+		return other.Equal(c)
+	}
+	if (c.MinCompatibilityVersion == nil && other.MinCompatibilityVersion != nil) || (c.MinCompatibilityVersion != nil && other.MinCompatibilityVersion == nil) {
+		return false
+	} else if !c.MinCompatibilityVersion.Equal(*other.MinCompatibilityVersion) {
+		return false
+	}
+	if c.FeatureGates == nil || len(c.FeatureGates) == 0 {
+		return other.FeatureGates == nil || len(other.FeatureGates) == 0
+	}
+	return reflect.DeepEqual(c.FeatureGates, other.FeatureGates)
+}
+
 // Attributes represents all the non-raft related attributes of an etcd member.
 type Attributes struct {
-	Name       string   `json:"name,omitempty"`
-	ClientURLs []string `json:"clientURLs,omitempty"`
+	Name                  string         `json:"name,omitempty"`
+	ClientURLs            []string       `json:"clientURLs,omitempty"`
+	ProposedClusterParams *ClusterParams `json:"proposedClusterParams,omitempty"`
 }
 
 type Member struct {
@@ -97,7 +176,8 @@ func (m *Member) Clone() *Member {
 			IsLearner: m.IsLearner,
 		},
 		Attributes: Attributes{
-			Name: m.Name,
+			Name:                  m.Name,
+			ProposedClusterParams: m.ProposedClusterParams.Clone(),
 		},
 	}
 	if m.PeerURLs != nil {

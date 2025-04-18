@@ -22,10 +22,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coreos/go-semver/semver"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.uber.org/zap"
 
 	bolt "go.etcd.io/bbolt"
+	"go.etcd.io/etcd/api/v3/membershippb"
+	"go.etcd.io/etcd/api/v3/version"
 	"go.etcd.io/etcd/client/pkg/v3/transport"
 	"go.etcd.io/etcd/client/pkg/v3/types"
 	"go.etcd.io/etcd/pkg/v3/featuregate"
@@ -209,6 +212,8 @@ type ServerConfig struct {
 
 	// ServerFeatureGate is a server level feature gate
 	ServerFeatureGate featuregate.FeatureGate
+	// ClusterFeatureGate is a cluster level feature gate
+	ClusterFeatureGate featuregate.FeatureGate
 
 	// Metrics types of metrics - should be either 'basic' or 'extensive'
 	Metrics string
@@ -365,4 +370,18 @@ func (c *ServerConfig) BackendPath() string { return datadir.ToBackendFileName(c
 
 func (c *ServerConfig) MaxRequestBytesWithOverhead() uint {
 	return c.MaxRequestBytes + grpcOverheadBytes
+}
+
+func (c *ServerConfig) ClusterParams() (*membershippb.ClusterParams, error) {
+	if c.ClusterFeatureGate == nil {
+		c.Logger.Info("nil ClusterFeatureGate, skipping ClusterParams")
+		return nil, nil
+	}
+	ver := semver.New(version.Version)
+	clusterParams := membershippb.ClusterParams{MinCompatibilityVersion: semver.Version{Major: ver.Major, Minor: ver.Minor}.String()}
+
+	for k, v := range c.ClusterFeatureGate.(featuregate.MutableVersionedFeatureGate).GetFlagSetting() {
+		clusterParams.FeatureGates = append(clusterParams.FeatureGates, &membershippb.Feature{Name: k, Enabled: v})
+	}
+	return &clusterParams, nil
 }

@@ -49,6 +49,10 @@ func (s *serverVersionAdapter) LinearizableReadNotify(ctx context.Context) error
 	return s.linearizableReadNotify(ctx)
 }
 
+func (s *serverVersionAdapter) NeedUpdateClusterParams(ver *semver.Version) bool {
+	return s.needUpdateClusterParams(ver)
+}
+
 func (s *serverVersionAdapter) DowngradeEnable(ctx context.Context, targetVersion *semver.Version) error {
 	raftRequest := membershippb.DowngradeInfoSetRequest{Enabled: true, Ver: targetVersion.String()}
 	_, err := s.raftRequest(ctx, pb.InternalRaftRequest{DowngradeInfoSet: &raftRequest})

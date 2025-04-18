@@ -186,6 +186,10 @@ func (rcc *retryClusterClient) MemberPromote(ctx context.Context, in *pb.MemberP
 	return rcc.cc.MemberPromote(ctx, in, opts...)
 }
 
+func (rcc *retryClusterClient) ClusterFeatureStatus(ctx context.Context, in *pb.ClusterFeatureStatusRequest, opts ...grpc.CallOption) (resp *pb.ClusterFeatureStatusResponse, err error) {
+	return rcc.cc.ClusterFeatureStatus(ctx, in, append(opts, withRepeatablePolicy())...)
+}
+
 type retryMaintenanceClient struct {
 	mc pb.MaintenanceClient
 }

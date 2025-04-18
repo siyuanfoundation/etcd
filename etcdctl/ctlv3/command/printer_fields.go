@@ -16,6 +16,7 @@ package command
 
 import (
 	"fmt"
+	"strings"
 
 	pb "go.etcd.io/etcd/api/v3/etcdserverpb"
 	spb "go.etcd.io/etcd/api/v3/mvccpb"
@@ -215,6 +216,18 @@ func (p *fieldsPrinter) EndpointHashKV(hs []epHashKV) {
 		fmt.Printf("\"Endpoint\" : %q\n", h.Ep)
 		fmt.Println(`"Hash" :`, h.Resp.Hash)
 		fmt.Println(`"HashRevision" :`, h.Resp.HashRevision)
+		fmt.Println()
+	}
+}
+
+func (p *fieldsPrinter) EndpointClusterFeatureStatus(eps []epClusterFeatureStatus) {
+	for _, ep := range eps {
+		p.hdr(ep.Resp.Header)
+		features := []string{}
+		for _, f := range ep.Resp.Features {
+			features = append(features, fmt.Sprintf("%s=%v", f.Name, f.Enabled))
+		}
+		fmt.Println(`"Cluster Features" :`, strings.Join(features, ","))
 		fmt.Println()
 	}
 }

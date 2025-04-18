@@ -29,8 +29,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
+	"go.etcd.io/etcd/api/v3/membershippb"
 	"go.etcd.io/etcd/api/v3/version"
 	"go.etcd.io/etcd/client/pkg/v3/types"
+	"go.etcd.io/etcd/pkg/v3/featuregate"
 	"go.etcd.io/etcd/pkg/v3/netutil"
 	"go.etcd.io/etcd/pkg/v3/notify"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/v2store"
@@ -52,6 +54,10 @@ type RaftCluster struct {
 	sync.Mutex // guards the fields below
 	version    *semver.Version
 	members    map[types.ID]*Member
+
+	clusterParams      *ClusterParams
+	clusterFeatureGate featuregate.FeatureGate
+
 	// removed contains the ids of removed members in the cluster.
 	// removed id cannot be reused.
 	removed map[types.ID]bool
@@ -260,6 +266,16 @@ func (c *RaftCluster) UnsafeLoad() {
 	if c.be != nil {
 		c.version = c.be.ClusterVersionFromBackend()
 		c.members, c.removed = c.be.MustReadMembersFromBackend()
+		// if cluster version is not set, keep the clusterParams to local default.
+		if c.version != nil {
+			c.clusterParams = c.be.ClusterParamsFromBackend()
+			c.lg.Info("sizhangDebug: read cluster params from backend",
+				zap.String("cluster-params", c.clusterParams.String()),
+				zap.String("cluster-version", c.version.String()),
+			)
+		} else {
+			c.lg.Info("sizhangDebug: keeping original cluster params", zap.String("cluster-params", c.clusterParams.String()))
+		}
 	} else {
 		c.version = clusterVersionFromStore(c.lg, c.v2store)
 		c.members, c.removed = membersFromStore(c.lg, c.v2store)
@@ -307,6 +323,12 @@ func (c *RaftCluster) Recover(onSet func(*zap.Logger, *semver.Version)) {
 		c.lg.Info(
 			"set cluster version from store",
 			zap.String("cluster-version", version.Cluster(c.version.String())),
+		)
+	}
+	if c.clusterParams != nil {
+		c.lg.Info(
+			"set cluster params from store",
+			zap.String("cluster-params", c.clusterParams.String()),
 		)
 	}
 }
@@ -483,11 +505,51 @@ func (c *RaftCluster) RemoveMember(id types.ID, shouldApplyV3 ShouldApplyV3) {
 	}
 }
 
+func (c *RaftCluster) MemberAttributes(id types.ID) Attributes {
+	if m, ok := c.members[id]; ok {
+		return m.Attributes
+	}
+	return Attributes{}
+}
+
 func (c *RaftCluster) UpdateAttributes(id types.ID, attr Attributes, shouldApplyV3 ShouldApplyV3) {
 	c.Lock()
 	defer c.Unlock()
 
+	for _, member := range c.members {
+		c.lg.Info("existing member ProposedClusterParams",
+			zap.String("member-id", member.ID.String()),
+			zap.String("member-proposed-cluster-params", member.Attributes.ProposedClusterParams.String()),
+		)
+	}
+
 	if m, ok := c.members[id]; ok {
+		b, err := json.Marshal(attr)
+		if err != nil {
+			c.lg.Panic("failed to marshal attributes", zap.Error(err))
+		}
+		if c.clusterParams != nil && c.clusterParams.MinCompatibilityVersion != nil && !c.clusterParams.MinCompatibilityVersion.LessThan(version.V3_7) {
+			minCompatibilityVer := c.clusterParams.MinCompatibilityVersion
+			if attr.ProposedClusterParams == nil || attr.ProposedClusterParams.MinCompatibilityVersion == nil {
+				c.lg.Panic("cluster not compatible with member with no ProposedClusterParams, make sure you start a new cluster with only members of the same version!",
+					zap.String("cluster-id", c.cid.String()),
+					zap.String("cluster-min-compatibility-version", minCompatibilityVer.String()),
+					zap.String("local-member-id", c.localID.String()),
+					zap.String("remote-peer-id", id.String()),
+					zap.String("new-attributes", string(b)),
+				)
+			}
+			memberVer := attr.ProposedClusterParams.MinCompatibilityVersion
+			if memberVer.LessThan(*minCompatibilityVer) {
+				c.lg.Panic("cluster not compatible with member with lower version, make sure you start a new cluster with only members of the same version!",
+					zap.String("cluster-id", c.cid.String()),
+					zap.String("cluster-min-compatibility-version", minCompatibilityVer.String()),
+					zap.String("local-member-id", c.localID.String()),
+					zap.String("remote-peer-id", id.String()),
+					zap.String("new-attributes", string(b)),
+				)
+			}
+		}
 		m.Attributes = attr
 		if c.v2store != nil {
 			mustUpdateMemberAttrInStore(c.lg, c.v2store, m)
@@ -495,6 +557,14 @@ func (c *RaftCluster) UpdateAttributes(id types.ID, attr Attributes, shouldApply
 		if c.be != nil && shouldApplyV3 {
 			c.be.MustSaveMemberToBackend(m)
 		}
+		c.lg.Info(
+			"updated member attributes",
+			zap.String("cluster-id", c.cid.String()),
+			zap.String("local-member-id", c.localID.String()),
+			zap.String("remote-peer-id", id.String()),
+			zap.String("new-attributes", string(b)),
+			zap.String("new-proposed-cluster-params", m.Attributes.ProposedClusterParams.String()),
+		)
 		return
 	}
 
@@ -626,10 +696,176 @@ func (c *RaftCluster) SetVersion(ver *semver.Version, onSet func(*zap.Logger, *s
 		ClusterVersionMetrics.With(prometheus.Labels{"cluster_version": version.Cluster(oldVer.String())}).Set(0)
 	}
 	ClusterVersionMetrics.With(prometheus.Labels{"cluster_version": version.Cluster(ver.String())}).Set(1)
+	// reset cluster feature gate
 	if c.versionChanged != nil {
 		c.versionChanged.Notify()
 	}
 	onSet(c.lg, ver)
+}
+
+func (c *RaftCluster) clusterParamsAtVersion(ver *semver.Version, clusterParams *ClusterParams) (*ClusterParams, error) {
+	if ver == nil {
+		return nil, nil
+	}
+	majorMinor := &semver.Version{Major: ver.Major, Minor: ver.Minor}
+	if majorMinor.LessThan(version.V3_7) || c.clusterFeatureGate == nil {
+		return nil, nil
+	}
+	fg := c.clusterFeatureGate.(featuregate.MutableVersionedFeatureGate).DeepCopyAndReset()
+	fg.SetEmulationVersion(majorMinor)
+	knownFeatures := fg.GetAll()
+	if clusterParams != nil && clusterParams.FeatureGates != nil {
+		for k, v := range clusterParams.FeatureGates {
+			if _, ok := knownFeatures[featuregate.Feature(k)]; ok {
+				if err := fg.SetFromMap(map[string]bool{k: v}); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	ret := ClusterParams{FeatureGates: make(map[string]bool), MinCompatibilityVersion: majorMinor}
+	for k, _ := range knownFeatures {
+		ret.FeatureGates[string(k)] = fg.Enabled(k)
+	}
+	return &ret, nil
+}
+
+// ReconcileClusterParams aggregates and reconciles the ProposedClusterParams from all members (if exist) at the given version to
+// ClusterParams to be set on the whole cluster.
+func (c *RaftCluster) ReconcileClusterParams(ver *semver.Version) *membershippb.ClusterParams {
+	if ver == nil {
+		return nil
+	}
+	majorMinor := &semver.Version{Major: ver.Major, Minor: ver.Minor}
+	if majorMinor.LessThan(version.V3_7) {
+		// c.lg.Info("reconcile cluster params with low version",
+		// 	zap.String("version", majorMinor.String()),
+		// 	zap.String("cluster-id", c.cid.String()),
+		// 	zap.String("local-member-id", c.localID.String()),
+		// )
+		return nil
+	}
+	if c.clusterFeatureGate == nil {
+		c.lg.Warn("reconcile cluster params got nil cluster feature gate",
+			zap.String("cluster-id", c.cid.String()),
+			zap.String("local-member-id", c.localID.String()),
+		)
+		return nil
+	}
+
+	clusterParamsList := []*ClusterParams{}
+	// c.lg.Info("reconcile cluster params",
+	// 	zap.String("cluster-id", c.cid.String()),
+	// 	zap.String("local-member-id", c.localID.String()),
+	// 	zap.String("current-cluster-params", c.ClusterParams().String()),
+	// )
+
+	for _, member := range c.VotingMembers() {
+		// c.lg.Info("member ProposedClusterParams",
+		// 	zap.String("member-id", member.ID.String()),
+		// 	zap.String("member-proposed-cluster-params", member.Attributes.ProposedClusterParams.String()),
+		// )
+		if member.Attributes.ProposedClusterParams != nil {
+			if cp, err := c.clusterParamsAtVersion(majorMinor, member.Attributes.ProposedClusterParams); err != nil {
+				c.lg.Panic("failed to get cluster params at version", zap.Error(err),
+					zap.String("member-id", member.ID.String()),
+					zap.String("member-proposed-cluster-params", member.Attributes.ProposedClusterParams.String()),
+				)
+			} else {
+				clusterParamsList = append(clusterParamsList, cp)
+			}
+		}
+	}
+
+	if len(clusterParamsList) == 0 {
+		// Adding default
+		if cp, err := c.clusterParamsAtVersion(majorMinor, nil); err != nil {
+			c.lg.Panic("failed to get default cluster params at version", zap.Error(err))
+		} else {
+			clusterParamsList = append(clusterParamsList, cp)
+		}
+	}
+	features := make(map[string]bool)
+
+	clusterParams := membershippb.ClusterParams{MinCompatibilityVersion: majorMinor.String()}
+	for i, cp := range clusterParamsList {
+		if i == 0 {
+			for k, v := range cp.FeatureGates {
+				features[k] = v
+			}
+			continue
+		}
+		for k, v := range cp.FeatureGates {
+			if val, ok := features[k]; ok {
+				features[k] = v && val
+			}
+		}
+	}
+	for k, v := range features {
+		clusterParams.FeatureGates = append(clusterParams.FeatureGates, &membershippb.Feature{Name: k, Enabled: v})
+	}
+	// c.lg.Info("reconciled cluster params",
+	// 	zap.String("cluster-id", c.cid.String()),
+	// 	zap.String("local-member-id", c.localID.String()),
+	// 	zap.String("current-cluster-params", c.ClusterParams().String()),
+	// 	zap.String("reconciled-cluster-params", clusterParams.String()),
+	// )
+	return &clusterParams
+}
+
+func (c *RaftCluster) SetClusterFeatureGate(fg featuregate.FeatureGate) {
+	c.Lock()
+	defer c.Unlock()
+	c.clusterFeatureGate = fg
+}
+
+// FeatureEnabled checks if a feature is enabled for the whole cluster.
+func (c *RaftCluster) FeatureEnabled(feature string) bool {
+	if c.clusterParams == nil || c.clusterParams.FeatureGates == nil {
+		return false
+	}
+	if val, ok := c.clusterParams.FeatureGates[feature]; ok {
+		return val
+	}
+	return false
+}
+
+func (c *RaftCluster) ClusterParams() *ClusterParams {
+	c.Lock()
+	defer c.Unlock()
+	return c.clusterParams
+}
+
+func (c *RaftCluster) SetClusterParams(newParams *membershippb.ClusterParams, saveToBackend bool) {
+	c.Lock()
+	defer c.Unlock()
+	clusterParams := ClusterParamsPbToGo(newParams)
+	c.clusterParams = clusterParams
+	if c.be != nil && saveToBackend {
+		c.be.MustSaveClusterParamsToBackend(clusterParams)
+	}
+	c.lg.Info(
+		"set cluster params",
+		zap.String("cluster-id", c.cid.String()),
+		zap.String("cluster-params", clusterParams.String()),
+	)
+}
+
+func ClusterParamsPbToGo(r *membershippb.ClusterParams) *ClusterParams {
+	if r == nil {
+		return nil
+	}
+	clusterParams := ClusterParams{FeatureGates: make(map[string]bool)}
+	if r.MinCompatibilityVersion != "" {
+		clusterParams.MinCompatibilityVersion = semver.New(r.MinCompatibilityVersion)
+	}
+	if r.FeatureGates == nil {
+		return &clusterParams
+	}
+	for _, f := range r.FeatureGates {
+		clusterParams.FeatureGates[f.Name] = f.Enabled
+	}
+	return &clusterParams
 }
 
 func (c *RaftCluster) IsReadyToAddVotingMember() bool {

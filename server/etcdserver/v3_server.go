@@ -20,9 +20,11 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	errorspkg "errors"
+	"reflect"
 	"strconv"
 	"time"
 
+	"github.com/coreos/go-semver/semver"
 	"github.com/gogo/protobuf/proto"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
@@ -1051,4 +1053,10 @@ func (s *EtcdServer) downgradeCancel(ctx context.Context) (*pb.DowngradeResponse
 	}
 	resp := pb.DowngradeResponse{Version: version.Cluster(s.ClusterVersion().String())}
 	return &resp, nil
+}
+
+func (s *EtcdServer) needUpdateClusterParams(ver *semver.Version) bool {
+	currentParams := s.cluster.ClusterParams()
+	newParams := s.cluster.ReconcileClusterParams(ver)
+	return !reflect.DeepEqual(currentParams, membership.ClusterParamsPbToGo(newParams))
 }

@@ -29,6 +29,7 @@ import (
 	"go.uber.org/zap"
 
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
+	"go.etcd.io/etcd/api/v3/version"
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"go.etcd.io/etcd/client/pkg/v3/types"
 	"go.etcd.io/etcd/pkg/v3/pbutil"
@@ -282,6 +283,25 @@ func bootstrapCluster(cfg config.ServerConfig, bwal *bootstrappedWAL, prt http.R
 	}
 	if err != nil {
 		return nil, err
+	}
+	c.cl.SetClusterFeatureGate(cfg.ClusterFeatureGate)
+	// For new cluster, initialize clusterParams with the default based on server version.
+	clusterParams := c.cl.ReconcileClusterParams(semver.New(version.Version))
+	if err != nil {
+		return nil, err
+	}
+	c.cl.SetClusterParams(clusterParams, false)
+	if clusterParams != nil {
+		cfg.Logger.Info(
+			"sizhangDebug: bootstrap cluster params",
+			zap.String("server-version", version.Version),
+			zap.String("cluster-params", clusterParams.String()),
+		)
+	} else {
+		cfg.Logger.Info(
+			"bootstrap with nil cluster params",
+			zap.String("server-version", version.Version),
+		)
 	}
 	return c, nil
 }

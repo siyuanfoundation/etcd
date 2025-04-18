@@ -217,6 +217,10 @@ func (m *memberMock) LinearizableReadNotify(ctx context.Context) error {
 	return nil
 }
 
+func (m *memberMock) NeedUpdateClusterParams(ver *semver.Version) bool {
+	return false
+}
+
 func (m *memberMock) DowngradeEnable(ctx context.Context, targetVersion *semver.Version) error {
 	m.cluster.downgradeInfo = &DowngradeInfo{
 		TargetVersion: targetVersion.String(),

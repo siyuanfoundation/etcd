@@ -592,6 +592,39 @@
         ]
       }
     },
+    "/v3/cluster/featurestatus": {
+      "post": {
+        "summary": "ClusterFeatures returns if a list features are enabled for the whole cluster.",
+        "operationId": "Cluster_ClusterFeatureStatus",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/etcdserverpbClusterFeatureStatusResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/etcdserverpbClusterFeatureStatusRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Cluster"
+        ]
+      }
+    },
     "/v3/cluster/member/add": {
       "post": {
         "summary": "MemberAdd adds a member into the cluster.",
@@ -2013,6 +2046,36 @@
         }
       }
     },
+    "etcdserverpbClusterFeatureStatusRequest": {
+      "type": "object",
+      "properties": {
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "if empty, returns the status of all features."
+        },
+        "linearizable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "etcdserverpbClusterFeatureStatusResponse": {
+      "type": "object",
+      "properties": {
+        "header": {
+          "$ref": "#/definitions/etcdserverpbResponseHeader"
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/membershippbFeature"
+          }
+        }
+      }
+    },
     "etcdserverpbCompactionRequest": {
       "type": "object",
       "properties": {
@@ -3039,6 +3102,17 @@
             "type": "object",
             "$ref": "#/definitions/protobufAny"
           }
+        }
+      }
+    },
+    "membershippbFeature": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
         }
       }
     },

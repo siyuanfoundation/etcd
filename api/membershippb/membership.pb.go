@@ -69,20 +69,107 @@ func (m *RaftAttributes) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RaftAttributes proto.InternalMessageInfo
 
-// Attributes represents all the non-raft related attributes of an etcd member.
-type Attributes struct {
+type Feature struct {
 	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	ClientUrls           []string `protobuf:"bytes,2,rep,name=client_urls,json=clientUrls,proto3" json:"client_urls,omitempty"`
+	Enabled              bool     `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *Feature) Reset()         { *m = Feature{} }
+func (m *Feature) String() string { return proto.CompactTextString(m) }
+func (*Feature) ProtoMessage()    {}
+func (*Feature) Descriptor() ([]byte, []int) {
+	return fileDescriptor_949fe0d019050ef5, []int{1}
+}
+func (m *Feature) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Feature) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_Feature.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *Feature) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Feature.Merge(m, src)
+}
+func (m *Feature) XXX_Size() int {
+	return m.Size()
+}
+func (m *Feature) XXX_DiscardUnknown() {
+	xxx_messageInfo_Feature.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Feature proto.InternalMessageInfo
+
+// Parameters that need consensus in the whole cluster to function properly.
+type ClusterParams struct {
+	// min_compatibility_version makes sure the new cluster starts with only members with version equal to min_compatibility_version
+	// and existing cluster only accepts members with version ge to min_compatibility_version.
+	MinCompatibilityVersion string     `protobuf:"bytes,1,opt,name=min_compatibility_version,json=minCompatibilityVersion,proto3" json:"min_compatibility_version,omitempty"`
+	FeatureGates            []*Feature `protobuf:"bytes,2,rep,name=feature_gates,json=featureGates,proto3" json:"feature_gates,omitempty"`
+	XXX_NoUnkeyedLiteral    struct{}   `json:"-"`
+	XXX_unrecognized        []byte     `json:"-"`
+	XXX_sizecache           int32      `json:"-"`
+}
+
+func (m *ClusterParams) Reset()         { *m = ClusterParams{} }
+func (m *ClusterParams) String() string { return proto.CompactTextString(m) }
+func (*ClusterParams) ProtoMessage()    {}
+func (*ClusterParams) Descriptor() ([]byte, []int) {
+	return fileDescriptor_949fe0d019050ef5, []int{2}
+}
+func (m *ClusterParams) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ClusterParams) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ClusterParams.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ClusterParams) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ClusterParams.Merge(m, src)
+}
+func (m *ClusterParams) XXX_Size() int {
+	return m.Size()
+}
+func (m *ClusterParams) XXX_DiscardUnknown() {
+	xxx_messageInfo_ClusterParams.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ClusterParams proto.InternalMessageInfo
+
+// Attributes represents all the non-raft related attributes of an etcd member.
+type Attributes struct {
+	Name       string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	ClientUrls []string `protobuf:"bytes,2,rep,name=client_urls,json=clientUrls,proto3" json:"client_urls,omitempty"`
+	// the values of all cluster level parameters set by the configuration of the member server.
+	ProposedClusterParams *ClusterParams `protobuf:"bytes,3,opt,name=proposed_cluster_params,json=proposedClusterParams,proto3" json:"proposed_cluster_params,omitempty"`
+	XXX_NoUnkeyedLiteral  struct{}       `json:"-"`
+	XXX_unrecognized      []byte         `json:"-"`
+	XXX_sizecache         int32          `json:"-"`
 }
 
 func (m *Attributes) Reset()         { *m = Attributes{} }
 func (m *Attributes) String() string { return proto.CompactTextString(m) }
 func (*Attributes) ProtoMessage()    {}
 func (*Attributes) Descriptor() ([]byte, []int) {
-	return fileDescriptor_949fe0d019050ef5, []int{1}
+	return fileDescriptor_949fe0d019050ef5, []int{3}
 }
 func (m *Attributes) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -124,7 +211,7 @@ func (m *Member) Reset()         { *m = Member{} }
 func (m *Member) String() string { return proto.CompactTextString(m) }
 func (*Member) ProtoMessage()    {}
 func (*Member) Descriptor() ([]byte, []int) {
-	return fileDescriptor_949fe0d019050ef5, []int{2}
+	return fileDescriptor_949fe0d019050ef5, []int{4}
 }
 func (m *Member) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -154,17 +241,19 @@ func (m *Member) XXX_DiscardUnknown() {
 var xxx_messageInfo_Member proto.InternalMessageInfo
 
 type ClusterVersionSetRequest struct {
-	Ver                  string   `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// cluster level parameters for the whole cluster at the cluster version.
+	ClusterParams        *ClusterParams `protobuf:"bytes,2,opt,name=cluster_params,json=clusterParams,proto3" json:"cluster_params,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_unrecognized     []byte         `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
 }
 
 func (m *ClusterVersionSetRequest) Reset()         { *m = ClusterVersionSetRequest{} }
 func (m *ClusterVersionSetRequest) String() string { return proto.CompactTextString(m) }
 func (*ClusterVersionSetRequest) ProtoMessage()    {}
 func (*ClusterVersionSetRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_949fe0d019050ef5, []int{3}
+	return fileDescriptor_949fe0d019050ef5, []int{5}
 }
 func (m *ClusterVersionSetRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -205,7 +294,7 @@ func (m *ClusterMemberAttrSetRequest) Reset()         { *m = ClusterMemberAttrSe
 func (m *ClusterMemberAttrSetRequest) String() string { return proto.CompactTextString(m) }
 func (*ClusterMemberAttrSetRequest) ProtoMessage()    {}
 func (*ClusterMemberAttrSetRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_949fe0d019050ef5, []int{4}
+	return fileDescriptor_949fe0d019050ef5, []int{6}
 }
 func (m *ClusterMemberAttrSetRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -246,7 +335,7 @@ func (m *DowngradeInfoSetRequest) Reset()         { *m = DowngradeInfoSetRequest
 func (m *DowngradeInfoSetRequest) String() string { return proto.CompactTextString(m) }
 func (*DowngradeInfoSetRequest) ProtoMessage()    {}
 func (*DowngradeInfoSetRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_949fe0d019050ef5, []int{5}
+	return fileDescriptor_949fe0d019050ef5, []int{7}
 }
 func (m *DowngradeInfoSetRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -277,6 +366,8 @@ var xxx_messageInfo_DowngradeInfoSetRequest proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*RaftAttributes)(nil), "membershippb.RaftAttributes")
+	proto.RegisterType((*Feature)(nil), "membershippb.Feature")
+	proto.RegisterType((*ClusterParams)(nil), "membershippb.ClusterParams")
 	proto.RegisterType((*Attributes)(nil), "membershippb.Attributes")
 	proto.RegisterType((*Member)(nil), "membershippb.Member")
 	proto.RegisterType((*ClusterVersionSetRequest)(nil), "membershippb.ClusterVersionSetRequest")
@@ -287,34 +378,43 @@ func init() {
 func init() { proto.RegisterFile("membership.proto", fileDescriptor_949fe0d019050ef5) }
 
 var fileDescriptor_949fe0d019050ef5 = []byte{
-	// 422 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x52, 0xc1, 0x6e, 0xd3, 0x40,
-	0x10, 0xed, 0x3a, 0x55, 0x6b, 0x4f, 0x51, 0x28, 0x2b, 0x24, 0xac, 0x06, 0x8c, 0x55, 0x2e, 0x39,
-	0xd9, 0x12, 0x51, 0x0f, 0x70, 0x03, 0xd2, 0x43, 0x10, 0xe5, 0xb0, 0xa8, 0x1c, 0xb8, 0x44, 0xeb,
-	0x66, 0x62, 0x56, 0x72, 0xbc, 0x66, 0x77, 0x5d, 0xee, 0x1c, 0xf9, 0x02, 0xfe, 0x82, 0x13, 0xff,
-	0xd0, 0x23, 0x9f, 0x00, 0xe1, 0x47, 0x90, 0x77, 0x9d, 0xd8, 0x11, 0x9c, 0x7a, 0x1b, 0x3f, 0xcf,
-	0xbc, 0x79, 0xef, 0xed, 0xc0, 0xf1, 0x0a, 0x57, 0x19, 0x2a, 0xfd, 0x51, 0x54, 0x49, 0xa5, 0xa4,
-	0x91, 0xf4, 0x4e, 0x87, 0x54, 0xd9, 0xc9, 0xfd, 0x5c, 0xe6, 0xd2, 0xfe, 0x48, 0x9b, 0xca, 0xf5,
-	0x9c, 0xc4, 0x68, 0xae, 0x16, 0x29, 0xaf, 0x44, 0x7a, 0x8d, 0x4a, 0x0b, 0x59, 0x56, 0xd9, 0xa6,
-	0x72, 0x1d, 0xa7, 0x97, 0x30, 0x64, 0x7c, 0x69, 0x5e, 0x18, 0xa3, 0x44, 0x56, 0x1b, 0xd4, 0x74,
-	0x04, 0x41, 0x85, 0xa8, 0xe6, 0xb5, 0x2a, 0x74, 0x48, 0xe2, 0xc1, 0x38, 0x60, 0x7e, 0x03, 0x5c,
-	0xaa, 0x42, 0xd3, 0x47, 0x00, 0x42, 0xcf, 0x0b, 0xe4, 0xaa, 0x44, 0x15, 0x7a, 0x31, 0x19, 0xfb,
-	0x2c, 0x10, 0xfa, 0x8d, 0x03, 0x9e, 0x1f, 0x7e, 0xf9, 0x11, 0x0e, 0x26, 0xc9, 0xd9, 0xe9, 0x6b,
-	0x80, 0x1e, 0x25, 0x85, 0xfd, 0x92, 0xaf, 0x30, 0x24, 0x31, 0x19, 0x07, 0xcc, 0xd6, 0xf4, 0x31,
-	0x1c, 0x5d, 0x15, 0x02, 0x4b, 0xe3, 0x16, 0x79, 0x76, 0x11, 0x38, 0xa8, 0x59, 0xd5, 0x71, 0x7d,
-	0x27, 0x70, 0x70, 0x61, 0xbd, 0xd2, 0x21, 0x78, 0xb3, 0xa9, 0xa5, 0xd9, 0x67, 0xde, 0x6c, 0x4a,
-	0xcf, 0xe1, 0xae, 0xe2, 0x4b, 0x33, 0xe7, 0xdb, 0x5d, 0x56, 0xd3, 0xd1, 0xd3, 0x87, 0x49, 0x3f,
-	0x9d, 0x64, 0xd7, 0x22, 0x1b, 0xaa, 0x5d, 0xcb, 0xe7, 0x70, 0xcf, 0xb5, 0xf7, 0x89, 0x06, 0x96,
-	0x28, 0xdc, 0x25, 0xea, 0x91, 0xb4, 0x2f, 0xd2, 0x21, 0x9d, 0xe2, 0x33, 0x08, 0x5f, 0x15, 0xb5,
-	0x36, 0xa8, 0xde, 0xbb, 0xb0, 0xdf, 0xa1, 0x61, 0xf8, 0xa9, 0x46, 0x6d, 0xe8, 0x31, 0x0c, 0xae,
-	0x51, 0xb5, 0x51, 0x34, 0x65, 0x37, 0xf6, 0x95, 0xc0, 0xa8, 0x9d, 0xbb, 0xd8, 0x72, 0xf7, 0x46,
-	0x47, 0x10, 0xb4, 0x32, 0xb7, 0x21, 0xf8, 0x0e, 0xb0, 0x51, 0xfc, 0xc7, 0x83, 0x77, 0x7b, 0x0f,
-	0x6f, 0xe1, 0xc1, 0x54, 0x7e, 0x2e, 0x73, 0xc5, 0x17, 0x38, 0x2b, 0x97, 0xb2, 0xa7, 0x23, 0x84,
-	0x43, 0x2c, 0x79, 0x56, 0xe0, 0xc2, 0xaa, 0xf0, 0xd9, 0xe6, 0x73, 0x63, 0xce, 0xfb, 0xd7, 0xdc,
-	0xcb, 0x67, 0x37, 0xbf, 0xa3, 0xbd, 0x9b, 0x75, 0x44, 0x7e, 0xae, 0x23, 0xf2, 0x6b, 0x1d, 0x91,
-	0x6f, 0x7f, 0xa2, 0xbd, 0x0f, 0x4f, 0x72, 0x99, 0x34, 0x37, 0x9a, 0x08, 0x99, 0x76, 0xb7, 0x3a,
-	0x49, 0xfb, 0x82, 0xb3, 0x03, 0x7b, 0xaa, 0x93, 0xbf, 0x01, 0x00, 0x00, 0xff, 0xff, 0xcf, 0x56,
-	0x21, 0x97, 0x04, 0x03, 0x00, 0x00,
+	// 567 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x94, 0xc1, 0x6e, 0xd3, 0x40,
+	0x10, 0x86, 0xbb, 0x4e, 0xd5, 0x34, 0x93, 0x36, 0x94, 0x15, 0x55, 0x4d, 0x03, 0xc1, 0x2a, 0x97,
+	0x9c, 0x1c, 0x29, 0x11, 0x42, 0xe4, 0x04, 0x6d, 0x0a, 0x8a, 0xa0, 0x08, 0x19, 0x95, 0x03, 0x42,
+	0xb2, 0xd6, 0xc9, 0x24, 0xac, 0x64, 0x7b, 0xcd, 0xee, 0xa6, 0x88, 0x6b, 0x8f, 0x3d, 0x71, 0xe4,
+	0x11, 0xb8, 0x71, 0xe2, 0x1d, 0x7a, 0xe4, 0x11, 0x20, 0xbc, 0x08, 0x8a, 0xd7, 0x89, 0x6d, 0x94,
+	0x0b, 0xdc, 0x26, 0x33, 0x93, 0xdf, 0xff, 0xff, 0x79, 0xbd, 0xb0, 0x17, 0x61, 0x14, 0xa0, 0x54,
+	0xef, 0x79, 0xe2, 0x26, 0x52, 0x68, 0x41, 0x77, 0xf2, 0x4e, 0x12, 0x1c, 0xde, 0x9a, 0x8a, 0xa9,
+	0x48, 0x07, 0x9d, 0x45, 0x65, 0x76, 0x0e, 0x1d, 0xd4, 0xa3, 0x71, 0x87, 0x25, 0xbc, 0x73, 0x81,
+	0x52, 0x71, 0x11, 0x27, 0xc1, 0xb2, 0x32, 0x1b, 0x47, 0xe7, 0xd0, 0xf0, 0xd8, 0x44, 0x3f, 0xd1,
+	0x5a, 0xf2, 0x60, 0xa6, 0x51, 0xd1, 0x26, 0xd4, 0x12, 0x44, 0xe9, 0xcf, 0x64, 0xa8, 0x6c, 0xe2,
+	0x54, 0xda, 0x35, 0x6f, 0x7b, 0xd1, 0x38, 0x97, 0xa1, 0xa2, 0x77, 0x01, 0xb8, 0xf2, 0x43, 0x64,
+	0x32, 0x46, 0x69, 0x5b, 0x0e, 0x69, 0x6f, 0x7b, 0x35, 0xae, 0x5e, 0x98, 0x46, 0xbf, 0x7a, 0xf9,
+	0xdd, 0xae, 0xf4, 0xdc, 0x07, 0x47, 0x8f, 0xa1, 0xfa, 0x14, 0x99, 0x9e, 0x49, 0xa4, 0x14, 0x36,
+	0x63, 0x16, 0xa1, 0x4d, 0x1c, 0xd2, 0xae, 0x79, 0x69, 0x4d, 0x6d, 0xa8, 0x62, 0xcc, 0x82, 0x10,
+	0xc7, 0x99, 0xc6, 0xf2, 0xe7, 0x52, 0xe1, 0xe1, 0xd1, 0x67, 0x02, 0xbb, 0x27, 0xe1, 0x4c, 0x69,
+	0x94, 0xaf, 0x98, 0x64, 0x91, 0xa2, 0x7d, 0xb8, 0x1d, 0xf1, 0xd8, 0x1f, 0x89, 0x28, 0x61, 0x9a,
+	0x07, 0x3c, 0xe4, 0xfa, 0x93, 0x9f, 0xa5, 0xc9, 0xd4, 0x0f, 0x22, 0x1e, 0x9f, 0x14, 0xe7, 0x6f,
+	0xcc, 0x98, 0xf6, 0x61, 0x77, 0x62, 0xfc, 0xf8, 0x53, 0xa6, 0x51, 0xd9, 0x96, 0x53, 0x69, 0xd7,
+	0xbb, 0xfb, 0x6e, 0x11, 0xa2, 0x9b, 0x59, 0xf6, 0x76, 0xb2, 0xdd, 0x67, 0x8b, 0xd5, 0xdc, 0xd2,
+	0x57, 0x02, 0x50, 0x00, 0xb5, 0x2e, 0xd8, 0x3d, 0xa8, 0x8f, 0x42, 0x8e, 0xb1, 0x36, 0xf8, 0xac,
+	0x14, 0x1f, 0x98, 0x56, 0x0a, 0xf0, 0x1d, 0x1c, 0x24, 0x52, 0x24, 0x42, 0xe1, 0xd8, 0x1f, 0x99,
+	0x78, 0x7e, 0x92, 0xe6, 0xb3, 0x2b, 0x0e, 0x69, 0xd7, 0xbb, 0xcd, 0xb2, 0xa5, 0x12, 0x82, 0xe3,
+	0xea, 0x95, 0xb1, 0xe2, 0xed, 0x2f, 0x45, 0x4a, 0xf3, 0x9c, 0xff, 0x37, 0x02, 0x5b, 0x67, 0xa9,
+	0x0e, 0x6d, 0x80, 0x35, 0x1c, 0xa4, 0x26, 0x37, 0x3d, 0x6b, 0x38, 0xa0, 0xa7, 0x70, 0x43, 0xb2,
+	0x89, 0xf6, 0xd9, 0x2a, 0x49, 0xfa, 0x0e, 0xea, 0xdd, 0x3b, 0xe5, 0x27, 0x97, 0x8f, 0x85, 0xd7,
+	0x90, 0xe5, 0x63, 0x72, 0x0a, 0x37, 0xcd, 0x7a, 0x51, 0xc8, 0x44, 0xb0, 0xcb, 0x42, 0x05, 0x91,
+	0xec, 0x14, 0xe7, 0x9d, 0xdc, 0xf1, 0x25, 0x01, 0x3b, 0x0b, 0x93, 0xbd, 0xb4, 0xd7, 0xa8, 0x3d,
+	0xfc, 0x30, 0x43, 0xa5, 0xe9, 0x1e, 0x54, 0x2e, 0x50, 0x66, 0xa4, 0x17, 0x25, 0x7d, 0x0e, 0x8d,
+	0xbf, 0xf0, 0x59, 0xff, 0x80, 0x6f, 0x77, 0xb4, 0x1e, 0xdb, 0x15, 0x81, 0x66, 0xf6, 0x97, 0xb3,
+	0x95, 0xd3, 0x82, 0x8f, 0x26, 0xd4, 0xb2, 0xd0, 0x2b, 0xa4, 0xdb, 0xa6, 0x91, 0x82, 0x5d, 0x43,
+	0xc4, 0xfa, 0x7f, 0x22, 0x2f, 0xe1, 0x60, 0x20, 0x3e, 0xc6, 0x53, 0xc9, 0xc6, 0x38, 0x8c, 0x27,
+	0xa2, 0xe0, 0xa3, 0xf0, 0xfd, 0x90, 0xd2, 0xf7, 0xb3, 0x24, 0x65, 0xad, 0x48, 0xad, 0xf4, 0x8e,
+	0x1f, 0x5d, 0xff, 0x6a, 0x6d, 0x5c, 0xcf, 0x5b, 0xe4, 0xc7, 0xbc, 0x45, 0x7e, 0xce, 0x5b, 0xe4,
+	0xcb, 0xef, 0xd6, 0xc6, 0xdb, 0xfb, 0x53, 0xe1, 0x2e, 0x6e, 0x09, 0x97, 0x8b, 0x4e, 0x7e, 0x5b,
+	0xf4, 0x3a, 0x45, 0xc3, 0xc1, 0x56, 0x7a, 0x59, 0xf4, 0xfe, 0x04, 0x00, 0x00, 0xff, 0xff, 0xa6,
+	0x21, 0x4b, 0xfb, 0x86, 0x04, 0x00, 0x00,
 }
 
 func (m *RaftAttributes) Marshal() (dAtA []byte, err error) {
@@ -363,6 +463,98 @@ func (m *RaftAttributes) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *Feature) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Feature) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Feature) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Enabled {
+		i--
+		if m.Enabled {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = encodeVarintMembership(dAtA, i, uint64(len(m.Name)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ClusterParams) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ClusterParams) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ClusterParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.FeatureGates) > 0 {
+		for iNdEx := len(m.FeatureGates) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.FeatureGates[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintMembership(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if len(m.MinCompatibilityVersion) > 0 {
+		i -= len(m.MinCompatibilityVersion)
+		copy(dAtA[i:], m.MinCompatibilityVersion)
+		i = encodeVarintMembership(dAtA, i, uint64(len(m.MinCompatibilityVersion)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *Attributes) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -386,6 +578,18 @@ func (m *Attributes) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.ProposedClusterParams != nil {
+		{
+			size, err := m.ProposedClusterParams.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMembership(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
 	}
 	if len(m.ClientUrls) > 0 {
 		for iNdEx := len(m.ClientUrls) - 1; iNdEx >= 0; iNdEx-- {
@@ -485,6 +689,18 @@ func (m *ClusterVersionSetRequest) MarshalToSizedBuffer(dAtA []byte) (int, error
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.ClusterParams != nil {
+		{
+			size, err := m.ClusterParams.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMembership(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
 	}
 	if len(m.Ver) > 0 {
 		i -= len(m.Ver)
@@ -616,6 +832,47 @@ func (m *RaftAttributes) Size() (n int) {
 	return n
 }
 
+func (m *Feature) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovMembership(uint64(l))
+	}
+	if m.Enabled {
+		n += 2
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ClusterParams) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.MinCompatibilityVersion)
+	if l > 0 {
+		n += 1 + l + sovMembership(uint64(l))
+	}
+	if len(m.FeatureGates) > 0 {
+		for _, e := range m.FeatureGates {
+			l = e.Size()
+			n += 1 + l + sovMembership(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *Attributes) Size() (n int) {
 	if m == nil {
 		return 0
@@ -631,6 +888,10 @@ func (m *Attributes) Size() (n int) {
 			l = len(s)
 			n += 1 + l + sovMembership(uint64(l))
 		}
+	}
+	if m.ProposedClusterParams != nil {
+		l = m.ProposedClusterParams.Size()
+		n += 1 + l + sovMembership(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -669,6 +930,10 @@ func (m *ClusterVersionSetRequest) Size() (n int) {
 	_ = l
 	l = len(m.Ver)
 	if l > 0 {
+		n += 1 + l + sovMembership(uint64(l))
+	}
+	if m.ClusterParams != nil {
+		l = m.ClusterParams.Size()
 		n += 1 + l + sovMembership(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
@@ -824,6 +1089,226 @@ func (m *RaftAttributes) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *Feature) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMembership
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Feature: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Feature: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMembership
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMembership
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthMembership
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Enabled", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMembership
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Enabled = bool(v != 0)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMembership(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMembership
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ClusterParams) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMembership
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ClusterParams: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ClusterParams: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MinCompatibilityVersion", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMembership
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMembership
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthMembership
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.MinCompatibilityVersion = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FeatureGates", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMembership
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMembership
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMembership
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.FeatureGates = append(m.FeatureGates, &Feature{})
+			if err := m.FeatureGates[len(m.FeatureGates)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMembership(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMembership
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *Attributes) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -916,6 +1401,42 @@ func (m *Attributes) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.ClientUrls = append(m.ClientUrls, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ProposedClusterParams", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMembership
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMembership
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMembership
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ProposedClusterParams == nil {
+				m.ProposedClusterParams = &ClusterParams{}
+			}
+			if err := m.ProposedClusterParams.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -1141,6 +1662,42 @@ func (m *ClusterVersionSetRequest) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Ver = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClusterParams", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMembership
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMembership
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMembership
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ClusterParams == nil {
+				m.ClusterParams = &ClusterParams{}
+			}
+			if err := m.ClusterParams.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

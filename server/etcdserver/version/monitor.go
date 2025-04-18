@@ -42,6 +42,7 @@ type Server interface {
 
 	GetStorageVersion() *semver.Version
 	UpdateStorageVersion(semver.Version) error
+	NeedUpdateClusterParams(*semver.Version) bool
 }
 
 func NewMonitor(lg *zap.Logger, storage Server) *Monitor {
@@ -65,6 +66,7 @@ func (m *Monitor) UpdateClusterVersionIfNeeded() error {
 // New cluster version is based on the members versions server and whether cluster is downgrading.
 // Returns nil if cluster version should be left unchanged.
 func (m *Monitor) decideClusterVersion() (*semver.Version, error) {
+
 	clusterVersion := m.s.GetClusterVersion()
 	minimalServerVersion := m.membersMinimalServerVersion()
 	if clusterVersion == nil {
@@ -98,6 +100,9 @@ func (m *Monitor) decideClusterVersion() (*semver.Version, error) {
 		return downgrade.GetTargetVersion(), nil
 	}
 	if clusterVersion.LessThan(*minimalServerVersion) && IsValidClusterVersionChange(clusterVersion, minimalServerVersion) {
+		return minimalServerVersion, nil
+	}
+	if m.s.NeedUpdateClusterParams(minimalServerVersion) {
 		return minimalServerVersion, nil
 	}
 	return nil, nil

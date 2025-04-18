@@ -47,3 +47,7 @@ func (s *cls2clc) MemberRemove(ctx context.Context, r *pb.MemberRemoveRequest, o
 func (s *cls2clc) MemberPromote(ctx context.Context, r *pb.MemberPromoteRequest, opts ...grpc.CallOption) (*pb.MemberPromoteResponse, error) {
 	return s.cls.MemberPromote(ctx, r)
 }
+
+func (s *cls2clc) ClusterFeatureStatus(ctx context.Context, r *pb.ClusterFeatureStatusRequest, opts ...grpc.CallOption) (*pb.ClusterFeatureStatusResponse, error) {
+	return s.cls.ClusterFeatureStatus(ctx, r)
+}

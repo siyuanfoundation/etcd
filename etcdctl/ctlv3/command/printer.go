@@ -49,6 +49,7 @@ type printer interface {
 	EndpointHealth([]epHealth)
 	EndpointStatus([]epStatus)
 	EndpointHashKV([]epHashKV)
+	EndpointClusterFeatureStatus([]epClusterFeatureStatus)
 	MoveLeader(leader, target uint64, r v3.MoveLeaderResponse)
 
 	DowngradeValidate(r v3.DowngradeResponse)
@@ -173,9 +174,10 @@ func newPrinterUnsupported(n string) printer {
 	return &printerUnsupported{printerRPC{nil, f}}
 }
 
-func (p *printerUnsupported) EndpointHealth([]epHealth) { p.p(nil) }
-func (p *printerUnsupported) EndpointStatus([]epStatus) { p.p(nil) }
-func (p *printerUnsupported) EndpointHashKV([]epHashKV) { p.p(nil) }
+func (p *printerUnsupported) EndpointHealth([]epHealth)                             { p.p(nil) }
+func (p *printerUnsupported) EndpointStatus([]epStatus)                             { p.p(nil) }
+func (p *printerUnsupported) EndpointHashKV([]epHashKV)                             { p.p(nil) }
+func (p *printerUnsupported) EndpointClusterFeatureStatus([]epClusterFeatureStatus) { p.p(nil) }
 
 func (p *printerUnsupported) MoveLeader(leader, target uint64, r v3.MoveLeaderResponse) { p.p(nil) }
 func (p *printerUnsupported) DowngradeValidate(r v3.DowngradeResponse)                  { p.p(nil) }
@@ -253,6 +255,21 @@ func makeEndpointHashKVTable(hashList []epHashKV) (hdr []string, rows [][]string
 			h.Ep,
 			fmt.Sprint(h.Resp.Hash),
 			fmt.Sprint(h.Resp.HashRevision),
+		})
+	}
+	return hdr, rows
+}
+
+func makeEndpointClusterFeatureStatusTable(featureStatusList []epClusterFeatureStatus) (hdr []string, rows [][]string) {
+	hdr = []string{"endpoint", "features"}
+	for _, status := range featureStatusList {
+		features := []string{}
+		for _, f := range status.Resp.Features {
+			features = append(features, fmt.Sprintf("%s=%v", f.Name, f.Enabled))
+		}
+		rows = append(rows, []string{
+			status.Ep,
+			strings.Join(features, ","),
 		})
 	}
 	return hdr, rows

@@ -15,6 +15,8 @@
 package schema
 
 import (
+	"fmt"
+
 	"go.uber.org/zap"
 
 	"go.etcd.io/etcd/server/v3/storage/backend"
@@ -34,6 +36,12 @@ type setKeyAction struct {
 
 func (a setKeyAction) unsafeDo(tx backend.UnsafeReadWriter) (action, error) {
 	revert := restoreFieldValueAction(tx, a.Bucket, a.FieldName)
+	// put if key does not exist
+	_, vs := tx.UnsafeRange(a.Bucket, a.FieldName, nil, 1)
+	if len(vs) == 1 {
+		fmt.Printf("sizhangDebug: skipping setKeyAction")
+		return revert, nil
+	}
 	tx.UnsafePut(a.Bucket, a.FieldName, a.FieldValue)
 	return revert, nil
 }

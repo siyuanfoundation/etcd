@@ -53,8 +53,9 @@ func (c *fakeCluster) Members() []*membership.Member {
 	sort.Sort(ms)
 	return ms
 }
-func (c *fakeCluster) Member(id types.ID) *membership.Member { return c.members[uint64(id)] }
-func (c *fakeCluster) Version() *semver.Version              { return nil }
+func (c *fakeCluster) Member(id types.ID) *membership.Member    { return c.members[uint64(id)] }
+func (c *fakeCluster) Version() *semver.Version                 { return nil }
+func (c *fakeCluster) ClusterParams() *membership.ClusterParams { return nil }
 
 type fakeServer struct {
 	cluster api.Cluster

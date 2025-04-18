@@ -355,7 +355,7 @@ func TestMinSupportedVersion(t *testing.T) {
 		{
 			name:                "first minor version should accept its previous version",
 			currentVersion:      version.V4_0,
-			minSupportedVersion: version.V3_7,
+			minSupportedVersion: version.V3_8,
 		},
 		{
 			name:                "first version in list should not accept previous versions",
@@ -509,5 +509,9 @@ func (mc *mockCluster) MemberUpdate(ctx context.Context, id uint64, peerAddrs []
 }
 
 func (mc *mockCluster) MemberPromote(ctx context.Context, id uint64) (*MemberPromoteResponse, error) {
+	return nil, nil
+}
+
+func (mc *mockCluster) ClusterFeatureStatus(ctx context.Context, features []string, opts ...OpOption) (*ClusterFeatureStatusResponse, error) {
 	return nil, nil
 }

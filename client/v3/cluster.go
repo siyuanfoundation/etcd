@@ -24,12 +24,13 @@ import (
 )
 
 type (
-	Member                pb.Member
-	MemberListResponse    pb.MemberListResponse
-	MemberAddResponse     pb.MemberAddResponse
-	MemberRemoveResponse  pb.MemberRemoveResponse
-	MemberUpdateResponse  pb.MemberUpdateResponse
-	MemberPromoteResponse pb.MemberPromoteResponse
+	Member                       pb.Member
+	MemberListResponse           pb.MemberListResponse
+	MemberAddResponse            pb.MemberAddResponse
+	MemberRemoveResponse         pb.MemberRemoveResponse
+	MemberUpdateResponse         pb.MemberUpdateResponse
+	MemberPromoteResponse        pb.MemberPromoteResponse
+	ClusterFeatureStatusResponse pb.ClusterFeatureStatusResponse
 )
 
 type Cluster interface {
@@ -50,6 +51,8 @@ type Cluster interface {
 
 	// MemberPromote promotes a member from raft learner (non-voting) to raft voting member.
 	MemberPromote(ctx context.Context, id uint64) (*MemberPromoteResponse, error)
+
+	ClusterFeatureStatus(ctx context.Context, features []string, opts ...OpOption) (*ClusterFeatureStatusResponse, error)
 }
 
 type cluster struct {
@@ -138,4 +141,13 @@ func (c *cluster) MemberPromote(ctx context.Context, id uint64) (*MemberPromoteR
 		return nil, ContextError(ctx, err)
 	}
 	return (*MemberPromoteResponse)(resp), nil
+}
+
+func (c *cluster) ClusterFeatureStatus(ctx context.Context, features []string, opts ...OpOption) (*ClusterFeatureStatusResponse, error) {
+	opt := OpGet("", opts...)
+	resp, err := c.remote.ClusterFeatureStatus(ctx, &pb.ClusterFeatureStatusRequest{Features: features, Linearizable: !opt.serializable}, c.callOpts...)
+	if err == nil {
+		return (*ClusterFeatureStatusResponse)(resp), nil
+	}
+	return nil, ContextError(ctx, err)
 }

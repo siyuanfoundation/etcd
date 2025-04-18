@@ -176,6 +176,13 @@ func (s *simplePrinter) EndpointHashKV(hashList []epHashKV) {
 	}
 }
 
+func (s *simplePrinter) EndpointClusterFeatureStatus(statusList []epClusterFeatureStatus) {
+	_, rows := makeEndpointClusterFeatureStatusTable(statusList)
+	for _, row := range rows {
+		fmt.Println(strings.Join(row, ", "))
+	}
+}
+
 func (s *simplePrinter) MoveLeader(leader, target uint64, r v3.MoveLeaderResponse) {
 	fmt.Printf("Leadership transferred from %s to %s\n", types.ID(leader), types.ID(target))
 }

@@ -35,6 +35,8 @@ import (
 var (
 	epClusterEndpoints bool
 	epHashKVRev        int64
+	epClusterFeatures  []string
+	featureConsistency string
 )
 
 // NewEndpointCommand returns the cobra command for "endpoint".
@@ -48,6 +50,7 @@ func NewEndpointCommand() *cobra.Command {
 	ec.AddCommand(newEpHealthCommand())
 	ec.AddCommand(newEpStatusCommand())
 	ec.AddCommand(newEpHashKVCommand())
+	ec.AddCommand(newEpClusterFeatureStatusCommand())
 
 	return ec
 }
@@ -80,6 +83,17 @@ func newEpHashKVCommand() *cobra.Command {
 		Run:   epHashKVCommandFunc,
 	}
 	hc.PersistentFlags().Int64Var(&epHashKVRev, "rev", 0, "maximum revision to hash (default: latest revision)")
+	return hc
+}
+
+func newEpClusterFeatureStatusCommand() *cobra.Command {
+	hc := &cobra.Command{
+		Use:   "clusterfeature",
+		Short: "Prints the cluster feature status for each endpoint in --endpoints",
+		Run:   epClusterFeatureStatusCommandFunc,
+	}
+	hc.PersistentFlags().StringSliceVar(&epClusterFeatures, "features", []string{}, "list of cluster features to check")
+	hc.Flags().StringVar(&featureConsistency, "consistency", "l", "Linearizable(l) or Serializable(s)")
 	return hc
 }
 
@@ -241,6 +255,43 @@ func epHashKVCommandFunc(cmd *cobra.Command, args []string) {
 
 	if err != nil {
 		cobrautl.ExitWithError(cobrautl.ExitError, err)
+	}
+}
+
+type epClusterFeatureStatus struct {
+	Ep   string                                 `json:"Endpoint"`
+	Resp *clientv3.ClusterFeatureStatusResponse `json:"ClusterFeatureStatus"`
+}
+
+func epClusterFeatureStatusCommandFunc(cmd *cobra.Command, args []string) {
+	cfg := clientConfigFromCmd(cmd)
+
+	var opts []clientv3.OpOption
+	if IsSerializable(featureConsistency) {
+		opts = append(opts, clientv3.WithSerializable())
+	}
+
+	var statusList []epClusterFeatureStatus
+	var err error
+	for _, ep := range endpointsFromCluster(cmd) {
+		cfg.Endpoints = []string{ep}
+		c := mustClient(cfg)
+		ctx, cancel := commandCtx(cmd)
+		resp, serr := c.ClusterFeatureStatus(ctx, epClusterFeatures, opts...)
+		cancel()
+		c.Close()
+		if serr != nil {
+			err = serr
+			fmt.Fprintf(os.Stderr, "Failed to get the status of endpoint %s (%v)\n", ep, serr)
+			continue
+		}
+		statusList = append(statusList, epClusterFeatureStatus{Ep: ep, Resp: resp})
+	}
+
+	display.EndpointClusterFeatureStatus(statusList)
+
+	if err != nil {
+		os.Exit(cobrautl.ExitError)
 	}
 }
 

@@ -59,6 +59,7 @@ func Migrate(lg *zap.Logger, tx backend.BatchTx, w wal.Version, target semver.Ve
 // UnsafeMigrate is non thread-safe version of Migrate.
 func UnsafeMigrate(lg *zap.Logger, tx backend.UnsafeReadWriter, w wal.Version, target semver.Version) error {
 	current, err := UnsafeDetectSchemaVersion(lg, tx)
+	lg.Info("sizhangDebug: UnsafeMigrate")
 	if err != nil {
 		return fmt.Errorf("cannot detect storage schema version: %w", err)
 	}
@@ -135,8 +136,12 @@ var (
 		version.V3_6: {
 			addNewField(Meta, MetaStorageVersionName, emptyStorageVersion),
 		},
+		version.V3_7: {
+			addNewField(Cluster, ClusterClusterParamsKeyName, emptyClusterParams),
+		},
 	}
 	// emptyStorageVersion is used for v3.6 Step for the first time, in all other version StoragetVersion should be set by migrator.
 	// Adding a addNewField for StorageVersion we can reuse logic to remove it when downgrading to v3.5
 	emptyStorageVersion = []byte("")
+	emptyClusterParams  = []byte("")
 )
