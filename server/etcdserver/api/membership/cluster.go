@@ -517,16 +517,38 @@ func (c *RaftCluster) UpdateAttributes(id types.ID, attr Attributes, shouldApply
 	}
 
 	if m, ok := c.members[id]; ok {
+		b, err := json.Marshal(attr)
+		if err != nil {
+			c.lg.Panic("failed to marshal attributes", zap.Error(err))
+		}
+		if c.clusterParams != nil && c.clusterParams.MinCompatibilityVersion != nil && !c.clusterParams.MinCompatibilityVersion.LessThan(version.V3_7) {
+			minCompatibilityVer := c.clusterParams.MinCompatibilityVersion
+			if attr.ProposedClusterParams == nil || attr.ProposedClusterParams.MinCompatibilityVersion == nil {
+				c.lg.Panic("cluster not compatible with member with no ProposedClusterParams, make sure you start a new cluster with only members of the same version!",
+					zap.String("cluster-id", c.cid.String()),
+					zap.String("cluster-min-compatibility-version", minCompatibilityVer.String()),
+					zap.String("local-member-id", c.localID.String()),
+					zap.String("remote-peer-id", id.String()),
+					zap.String("new-attributes", string(b)),
+				)
+			}
+			memberVer := attr.ProposedClusterParams.MinCompatibilityVersion
+			if memberVer.LessThan(*minCompatibilityVer) {
+				c.lg.Panic("cluster not compatible with member with lower version, make sure you start a new cluster with only members of the same version!",
+					zap.String("cluster-id", c.cid.String()),
+					zap.String("cluster-min-compatibility-version", minCompatibilityVer.String()),
+					zap.String("local-member-id", c.localID.String()),
+					zap.String("remote-peer-id", id.String()),
+					zap.String("new-attributes", string(b)),
+				)
+			}
+		}
 		m.Attributes = attr
 		if c.v2store != nil {
 			mustUpdateMemberAttrInStore(c.lg, c.v2store, m)
 		}
 		if c.be != nil && shouldApplyV3 {
 			c.be.MustSaveMemberToBackend(m)
-		}
-		b, err := json.Marshal(m.Attributes)
-		if err != nil {
-			c.lg.Panic("failed to marshal attributes", zap.Error(err))
 		}
 		c.lg.Info(
 			"updated member attributes",
@@ -694,7 +716,7 @@ func (c *RaftCluster) clusterParamsAtVersion(ver *semver.Version, clusterParams 
 			}
 		}
 	}
-	ret := ClusterParams{FeatureGates: make(map[string]bool)}
+	ret := ClusterParams{FeatureGates: make(map[string]bool), MinCompatibilityVersion: majorMinor}
 	for k, _ := range knownFeatures {
 		ret.FeatureGates[string(k)] = fg.Enabled(k)
 	}
@@ -705,16 +727,15 @@ func (c *RaftCluster) clusterParamsAtVersion(ver *semver.Version, clusterParams 
 // ClusterParams to be set on the whole cluster.
 func (c *RaftCluster) ReconcileClusterParams(ver *semver.Version) *membershippb.ClusterParams {
 	if ver == nil {
-		c.lg.Info("sizhangDebug: nil ver in ReconcileClusterParams")
 		return nil
 	}
 	majorMinor := &semver.Version{Major: ver.Major, Minor: ver.Minor}
 	if majorMinor.LessThan(version.V3_7) {
-		c.lg.Info("reconcile cluster params with low version",
-			zap.String("version", majorMinor.String()),
-			zap.String("cluster-id", c.cid.String()),
-			zap.String("local-member-id", c.localID.String()),
-		)
+		// c.lg.Info("reconcile cluster params with low version",
+		// 	zap.String("version", majorMinor.String()),
+		// 	zap.String("cluster-id", c.cid.String()),
+		// 	zap.String("local-member-id", c.localID.String()),
+		// )
 		return nil
 	}
 	if c.clusterFeatureGate == nil {
@@ -726,17 +747,17 @@ func (c *RaftCluster) ReconcileClusterParams(ver *semver.Version) *membershippb.
 	}
 
 	clusterParamsList := []*ClusterParams{}
-	c.lg.Info("reconcile cluster params",
-		zap.String("cluster-id", c.cid.String()),
-		zap.String("local-member-id", c.localID.String()),
-		zap.String("current-cluster-params", c.ClusterParams().String()),
-	)
+	// c.lg.Info("reconcile cluster params",
+	// 	zap.String("cluster-id", c.cid.String()),
+	// 	zap.String("local-member-id", c.localID.String()),
+	// 	zap.String("current-cluster-params", c.ClusterParams().String()),
+	// )
 
 	for _, member := range c.VotingMembers() {
-		c.lg.Info("member ProposedClusterParams",
-			zap.String("member-id", member.ID.String()),
-			zap.String("member-proposed-cluster-params", member.Attributes.ProposedClusterParams.String()),
-		)
+		// c.lg.Info("member ProposedClusterParams",
+		// 	zap.String("member-id", member.ID.String()),
+		// 	zap.String("member-proposed-cluster-params", member.Attributes.ProposedClusterParams.String()),
+		// )
 		if member.Attributes.ProposedClusterParams != nil {
 			if cp, err := c.clusterParamsAtVersion(majorMinor, member.Attributes.ProposedClusterParams); err != nil {
 				c.lg.Panic("failed to get cluster params at version", zap.Error(err),
@@ -759,7 +780,7 @@ func (c *RaftCluster) ReconcileClusterParams(ver *semver.Version) *membershippb.
 	}
 	features := make(map[string]bool)
 
-	clusterParams := membershippb.ClusterParams{}
+	clusterParams := membershippb.ClusterParams{MinCompatibilityVersion: majorMinor.String()}
 	for i, cp := range clusterParamsList {
 		if i == 0 {
 			for k, v := range cp.FeatureGates {
@@ -776,12 +797,12 @@ func (c *RaftCluster) ReconcileClusterParams(ver *semver.Version) *membershippb.
 	for k, v := range features {
 		clusterParams.FeatureGates = append(clusterParams.FeatureGates, &membershippb.Feature{Name: k, Enabled: v})
 	}
-	c.lg.Info("reconciled cluster params",
-		zap.String("cluster-id", c.cid.String()),
-		zap.String("local-member-id", c.localID.String()),
-		zap.String("current-cluster-params", c.ClusterParams().String()),
-		zap.String("reconciled-cluster-params", clusterParams.String()),
-	)
+	// c.lg.Info("reconciled cluster params",
+	// 	zap.String("cluster-id", c.cid.String()),
+	// 	zap.String("local-member-id", c.localID.String()),
+	// 	zap.String("current-cluster-params", c.ClusterParams().String()),
+	// 	zap.String("reconciled-cluster-params", clusterParams.String()),
+	// )
 	return &clusterParams
 }
 
@@ -837,6 +858,9 @@ func ClusterParamsPbToGo(r *membershippb.ClusterParams) *ClusterParams {
 		return nil
 	}
 	clusterParams := ClusterParams{FeatureGates: make(map[string]bool)}
+	if r.MinCompatibilityVersion != "" {
+		clusterParams.MinCompatibilityVersion = semver.New(r.MinCompatibilityVersion)
+	}
 	if r.FeatureGates == nil {
 		return &clusterParams
 	}

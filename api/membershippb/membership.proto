@@ -29,7 +29,10 @@ message Feature {
 // Parameters that need consensus in the whole cluster to function properly.
 message ClusterParams {
   option (versionpb.etcd_version_msg) = "3.7";
-  repeated Feature feature_gates = 1;
+  // min_compatibility_version makes sure the new cluster starts with only members with version equal to min_compatibility_version
+  // and existing cluster only accepts members with version ge to min_compatibility_version.
+  string min_compatibility_version = 1;
+  repeated Feature feature_gates = 2;
 }
 
 // Attributes represents all the non-raft related attributes of an etcd member.

@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coreos/go-semver/semver"
 	"go.etcd.io/etcd/api/v3/membershippb"
 	"go.etcd.io/etcd/client/pkg/v3/types"
 )
@@ -44,7 +45,8 @@ type Feature struct {
 }
 
 type ClusterParams struct {
-	FeatureGates map[string]bool `json:"featureGates,omitempty"`
+	MinCompatibilityVersion *semver.Version `json:"minCompatibilityVersion,omitempty"`
+	FeatureGates            map[string]bool `json:"featureGates,omitempty"`
 }
 
 func (c *ClusterParams) String() string {
@@ -62,7 +64,7 @@ func (c *ClusterParams) Clone() *ClusterParams {
 	if c == nil {
 		return nil
 	}
-	cp := &ClusterParams{}
+	cp := &ClusterParams{MinCompatibilityVersion: &semver.Version{Major: c.MinCompatibilityVersion.Major, Minor: c.MinCompatibilityVersion.Minor}}
 	if c.FeatureGates != nil {
 		cp.FeatureGates = make(map[string]bool)
 		for k, v := range c.FeatureGates {
@@ -77,6 +79,9 @@ func (c *ClusterParams) ToProto() *membershippb.ClusterParams {
 		return nil
 	}
 	ret := membershippb.ClusterParams{}
+	if c.MinCompatibilityVersion != nil {
+		ret.MinCompatibilityVersion = c.MinCompatibilityVersion.String()
+	}
 	if c.FeatureGates == nil {
 		return &ret
 	}
@@ -91,10 +96,15 @@ func (c *ClusterParams) Equal(other *ClusterParams) bool {
 		return true
 	}
 	if c == nil {
-		return other.FeatureGates == nil || len(other.FeatureGates) == 0
+		return (other.FeatureGates == nil || len(other.FeatureGates) == 0) && other.MinCompatibilityVersion == nil
 	}
 	if other == nil {
 		return other.Equal(c)
+	}
+	if (c.MinCompatibilityVersion == nil && other.MinCompatibilityVersion != nil) || (c.MinCompatibilityVersion == nil && other.MinCompatibilityVersion != nil) {
+		return false
+	} else if !c.MinCompatibilityVersion.Equal(*other.MinCompatibilityVersion) {
+		return false
 	}
 	if c.FeatureGates == nil || len(c.FeatureGates) == 0 {
 		return other.FeatureGates == nil || len(other.FeatureGates) == 0
