@@ -35,3 +35,10 @@ hack/tls-setup/certs
 /tools/benchmark/benchmark
 /out
 /etcd-dump-logs
+
+.gemini/commands/plan/debrief.toml
+.gemini/commands/plan/task.toml
+.gemini/commands/review/list.toml
+.gemini/commands/review/local.toml
+.gemini/commands/review/pr.toml
+GEMINI.md

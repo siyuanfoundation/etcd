@@ -293,7 +293,26 @@ func (reg *CheckRegistry) InstallHTTPEndpoints(lg *zap.Logger, mux *http.ServeMu
 			return reg.runHealthChecks(r.Context(), check)
 		}))
 	}
+	// initial run of the health checks to populate the initial values of the metrics
+	reg.runHealthChecks(context.Background(), checkNames...)
 }
+
+// func (reg *CheckRegistry) PeriodicHealthCheck(interval time.Duration, done <-chan struct{}) {
+// 	checkNames := []string{}
+// 	for k := range reg.checks {
+// 		checkNames = append(checkNames, k)
+// 	}
+// 	ticker := time.NewTicker(interval)
+// 	defer ticker.Stop()
+// 	for {
+// 		reg.runHealthChecks(context.Background(), checkNames...)
+// 		select {
+// 		case <-ticker.C:
+// 		case <-done:
+// 			return
+// 		}
+// 	}
+// }
 
 func (reg *CheckRegistry) runHealthChecks(ctx context.Context, checkNames ...string) HealthStatus {
 	h := HealthStatus{Status: HealthStatusSuccess}
